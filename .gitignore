@@ -56,6 +56,9 @@ desktop.ini
 # Claude Code
 .claude/
 
+# Personal data — CV and user profile, never public
+user_profile.yaml
+
 # Misc
 *.xlsx
 *.csv
