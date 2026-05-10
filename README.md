@@ -421,7 +421,7 @@ These are the improvements I know need to happen, roughly in priority order.
 - **Per-domain jitter profiles** — RemoteOK and Cloudflare-heavy boards need 15–20s delays between requests; python.org can handle 2s. Currently all domains share the same global `JITTER_MIN/MAX` ceiling.
 - **Rotating proxy support** — a residential proxy pool would bypass Cloudflare blocks that stealth mode alone can't handle. RemoteOK is effectively dead weight right now because of this.
 - **WebGL / Canvas fingerprint randomization** — `playwright-stealth` patches the main vectors but a determined Cloudflare check can still fingerprint via WebGL renderer strings and canvas noise. Proper randomization per-context would close that gap.
-- **Multi-page pagination** — the `next_page_btn` selectors are already defined in the registry for most boards. The scraper only hits page 1. Boards like himalayas and weworkremotely have 5–10 pages of results I'm not seeing.
+- ~~**Multi-page pagination**~~ ✅ Done — `_navigate_next_page()` follows `next_page_btn` selectors up to `MAX_PAGES_PER_DOMAIN` (default 5). Handles both anchor-href and JS-button navigation with per-page jitter and early-exit on empty pages.
 
 ### Login-Gated Boards
 
