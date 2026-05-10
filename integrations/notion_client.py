@@ -30,7 +30,7 @@ class NotionClient:
         Match Score  (number)  — 0–100
         Salary       (text)    — Raw salary string
         Source       (text)    — Job board domain
-        Status       (select)  — "To Review" | "Applied" | "Interview" | "Rejected"
+        Status       (select)  — "To Review" | "Manual Review" | "Applied" | "Interview" | "Rejected"
     """
 
     def __init__(self, api_key: Optional[str] = None, database_id: Optional[str] = None):
