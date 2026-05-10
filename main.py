@@ -31,6 +31,7 @@ from matcher import bucket_jobs
 from models import SearchConfig, SearchVaultEntry, ScrapeRunSummary
 from nlp_engine import parse_prompt_to_config, generate_and_audit_config
 from scraper import run_scrape_session
+import selectors_registry
 
 # =============================================================================
 # Logging — route Python logs into session_state.logs for the live console
@@ -291,6 +292,11 @@ if parse_btn and user_prompt.strip():
             cfg, audit_report = generate_and_audit_config(
                 user_prompt, log_callback=_add_log
             )
+
+            # Force all registered domains — AI only picks 2-3; we want all 14
+            cfg = cfg.model_copy(update={
+                "target_domains": list(selectors_registry.SELECTORS.keys())
+            })
 
             # Apply God Mode overrides if set
             if god_xpath:
