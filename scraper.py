@@ -474,6 +474,66 @@ class GemaScraper:
     # SRP Scraper — one tab per (domain × title) pair
     # =========================================================================
 
+    async def _navigate_next_page(
+        self,
+        page:   Page,
+        domain: str,
+        sel:    "DomainSelectors",
+        page_num: int,
+    ) -> bool:
+        """
+        Attempts to navigate to the next SRP page.
+
+        Strategy:
+            1. Locate the next-page element via sel.next_page_btn.
+            2. If it is an <a> with an href → navigate directly (reliable, avoids
+               click-interception on overlapping elements).
+            3. If it is a button with no href → click and wait for DOM update
+               (SPA/React boards that route via JS push-state).
+            4. Disabled or missing element → return False (end of results).
+
+        Returns True if navigation succeeded, False if no more pages.
+        """
+        if not sel.next_page_btn:
+            return False
+        try:
+            btn = await page.query_selector(sel.next_page_btn)
+            if not btn:
+                return False
+
+            # Disabled check — some boards grey out the button instead of hiding it
+            disabled     = await btn.get_attribute("disabled")
+            aria_disabled = await btn.get_attribute("aria-disabled")
+            if disabled is not None or aria_disabled == "true":
+                return False
+
+            href = (await btn.get_attribute("href") or "").strip()
+            if href:
+                # Anchor-based pagination — direct goto is faster and more stable
+                target = href if href.startswith("http") else f"https://{domain}{href}"
+                response = await page.goto(
+                    target,
+                    wait_until="domcontentloaded",
+                    timeout=config.PAGE_TIMEOUT_MS,
+                )
+                if response and response.status in (403, 429):
+                    self._rate_hits += 1
+                    self._log(
+                        f"[ANTI-BOT] HTTP {response.status} on {domain} page {page_num}"
+                    )
+                    return False
+            else:
+                # Button/JS pagination — click and wait for navigation
+                await btn.click()
+                await page.wait_for_load_state("domcontentloaded", timeout=config.PAGE_TIMEOUT_MS)
+
+            await page.wait_for_selector(sel.wait_for_selector, timeout=config.PAGE_TIMEOUT_MS)
+            return True
+
+        except Exception as exc:
+            logger.debug("[PAGINATION] %s page %d failed: %s", domain, page_num, exc)
+            return False
+
     async def _scrape_srp(
         self,
         context: BrowserContext,
@@ -481,8 +541,9 @@ class GemaScraper:
         title:   str,
     ) -> list[JobResult]:
         """
-        Surface Sniper: opens ONE page, loads ONE SRP, extracts ALL cards.
-        No navigation beyond the initial goto(). No clicks. Pure surface data.
+        Surface Sniper: opens ONE page per SRP, paginates up to MAX_PAGES_PER_DOMAIN.
+        Extracts surface metadata only — no detail-page navigation, no clicks beyond
+        the next-page button.
         """
         if self._abort_event.is_set():
             return []
@@ -540,10 +601,29 @@ class GemaScraper:
             # all parallel tabs hitting the same server at the same ms
             await _jitter(f"{domain}-after-load")
 
-            # Extract all cards from the SRP
+            # Extract all cards from page 1
             jobs = await self._extract_all_cards(page, domain, sel)
+            self._log(f"[PAGE 1] {domain} | '{title}' | {len(jobs)} jobs")
 
-            # Null-rate check after a full SRP extraction
+            # Pagination loop — follow next-page buttons up to MAX_PAGES_PER_DOMAIN
+            if sel.next_page_btn:
+                for page_num in range(2, config.MAX_PAGES_PER_DOMAIN + 1):
+                    if self._abort_event.is_set() or self.circuit.is_open(domain):
+                        break
+                    await _jitter(f"{domain}-pre-page-{page_num}")
+                    navigated = await self._navigate_next_page(page, domain, sel, page_num)
+                    if not navigated:
+                        break
+                    page_jobs = await self._extract_all_cards(page, domain, sel)
+                    self._log(
+                        f"[PAGE {page_num}] {domain} | '{title}' | {len(page_jobs)} jobs"
+                    )
+                    jobs.extend(page_jobs)
+                    # Stop early if the page returned nothing new
+                    if not page_jobs:
+                        break
+
+            # Null-rate check across all pages for this SRP
             self.circuit.check_null_rate(domain, sel.null_rate_alert_threshold)
 
         except Exception as exc:

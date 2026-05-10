@@ -1,6 +1,6 @@
-# GEMA — Intelligent Job Scraping & Extraction Pipeline
+# Resonance — AI-Native Discovery & Scoring Engine
 
-> **G**lobal **E**xtraction & **M**atching **A**gent  
+> *Powered by the GEMA extraction core*
 
 ---
 
@@ -78,7 +78,7 @@ User Prompt (natural language)
 
 ```bash
 git clone <your-repo-url>
-cd gema
+cd Resonance-AI-Native-Discovery-Scoring-Engine
 pip install -r requirements.txt
 playwright install chromium
 ```
@@ -170,10 +170,10 @@ The sheet will auto-create its header row on first run. If these are not set, th
 ### 6. Run
 
 ```bash
-python -m streamlit run main.py
+docker compose up --build
 ```
 
-Open `http://localhost:8501` in your browser.
+This runs the official Microsoft Playwright image (handling all Chromium OS dependencies), installs requirements, mounts the SQLite database securely, and serves the UI at `http://localhost:8501`.
 
 ---
 

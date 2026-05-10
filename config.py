@@ -193,6 +193,7 @@ def validate_config() -> list[str]:
 # At 3 tabs: ~440MB RAM, CPU stays under 85%. At 5: timeout cascade risk.
 SCRAPER_CONCURRENCY: int = int(os.getenv("SCRAPER_CONCURRENCY", "3"))
 IGNORE_HTTPS_ERRORS: bool = os.getenv("IGNORE_HTTPS_ERRORS", "False").lower() == "true"
+MAX_PAGES_PER_DOMAIN: int = int(os.getenv("MAX_PAGES_PER_DOMAIN", "5"))
 
 # Write-queue flush policy for the async DB writer task
 DB_WRITE_BATCH_SIZE: int    = int(os.getenv("DB_WRITE_BATCH_SIZE", "10"))
