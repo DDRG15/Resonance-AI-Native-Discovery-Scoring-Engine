@@ -22,11 +22,15 @@ load_dotenv()
 
 GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
 GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", "")
+COHERE_API_KEY: str = os.getenv("COHERE_API_KEY", "")
 PRIMARY_LLM: str = os.getenv("PRIMARY_LLM", "groq").lower()
 
 # Model identifiers
-GROQ_MODEL: str = "llama3-70b-8192"
-GEMINI_MODEL: str = "gemini-1.5-flash"
+GROQ_MODEL: str = "llama-3.3-70b-versatile"
+GEMINI_MODEL: str = "gemini-2.0-flash-lite"
+OPENROUTER_MODEL: str = "google/gemma-2-27b-it:free"
+COHERE_MODEL: str = "command-r-plus"
 
 # LLM retry policy (exponential backoff via tenacity)
 LLM_MAX_RETRIES: int = 3
@@ -127,9 +131,10 @@ def validate_config() -> list[str]:
     """
     warnings: list[str] = []
 
-    if not GROQ_API_KEY and not GEMINI_API_KEY:
+    if not any([GROQ_API_KEY, GEMINI_API_KEY, OPENROUTER_API_KEY, COHERE_API_KEY]):
         warnings.append(
-            "⚠️  No LLM API key found. Set GROQ_API_KEY or GEMINI_API_KEY in .env"
+            "⚠️  No LLM API key found. Set at least one of: "
+            "GROQ_API_KEY, GEMINI_API_KEY, OPENROUTER_API_KEY, COHERE_API_KEY in .env"
         )
 
     if PRIMARY_LLM == "groq" and not GROQ_API_KEY:
@@ -142,6 +147,16 @@ def validate_config() -> list[str]:
         warnings.append(
             "⚠️  PRIMARY_LLM=gemini but GEMINI_API_KEY is empty. "
             "Will attempt fallback to Groq."
+        )
+
+    if not OPENROUTER_API_KEY:
+        warnings.append(
+            "⚠️  OPENROUTER_API_KEY not set — OpenRouter fallback disabled."
+        )
+
+    if not COHERE_API_KEY:
+        warnings.append(
+            "⚠️  COHERE_API_KEY not set — Cohere fallback disabled."
         )
 
     if NOTION_API_KEY and not NOTION_DATABASE_ID:
