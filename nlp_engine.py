@@ -344,7 +344,7 @@ def _call_cohere(messages: list[dict]) -> str:
         if chat_history:
             payload["chat_history"] = chat_history
         resp = requests.post(
-            "https://api.cohere.ai/v1/chat",
+            "https://api.cohere.com/v1/chat",
             headers={
                 "Authorization": f"Bearer {config.COHERE_API_KEY}",
                 "Content-Type": "application/json",
@@ -418,7 +418,7 @@ def _call_cohere_plain(prompt: str) -> str:
         raise _ProviderRateLimited("Cohere API key not configured")
     try:
         resp = requests.post(
-            "https://api.cohere.ai/v1/chat",
+            "https://api.cohere.com/v1/chat",
             headers={
                 "Authorization": f"Bearer {config.COHERE_API_KEY}",
                 "Content-Type": "application/json",
