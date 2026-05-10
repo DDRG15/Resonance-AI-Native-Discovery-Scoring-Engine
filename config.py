@@ -30,7 +30,7 @@ PRIMARY_LLM: str = os.getenv("PRIMARY_LLM", "groq").lower()
 GROQ_MODEL: str = "llama-3.3-70b-versatile"
 GEMINI_MODEL: str = "gemini-2.0-flash-lite"
 OPENROUTER_MODEL: str = "google/gemma-2-27b-it"
-COHERE_MODEL: str = "command-r-plus"
+COHERE_MODEL: str = "command-r-plus-08-2024"
 
 # LLM retry policy (exponential backoff via tenacity)
 LLM_MAX_RETRIES: int = 3
