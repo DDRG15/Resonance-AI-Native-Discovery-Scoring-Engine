@@ -62,7 +62,7 @@ from urllib.parse import quote_plus
 from playwright.async_api import (
     async_playwright, Browser, BrowserContext, Page, Response,
 )
-from playwright_stealth import stealth_async
+from playwright_stealth import Stealth
 
 import config
 from selectors_registry import DomainSelectors, get_selectors
@@ -496,7 +496,7 @@ class GemaScraper:
         await page.set_extra_http_headers(
             {"User-Agent": random.choice(config.USER_AGENT_POOL)}
         )
-        await stealth_async(page)
+        await Stealth().apply_stealth_async(page)
 
         jobs: list[JobResult] = []
         try:

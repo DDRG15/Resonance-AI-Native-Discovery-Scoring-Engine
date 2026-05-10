@@ -30,5 +30,11 @@ notion-client==2.2.1
 gspread==6.1.2
 google-auth==2.29.0
 
+# ── HTTP Client ──────────────────────────────────────────────────────────────
+requests==2.32.3       # Discord webhook delivery (send_discord_alert)
+
+# ── Config Parsing ────────────────────────────────────────────────────────────
+pyyaml==6.0.2          # YAML user-profile parsing (user_profile.yaml)
+
 # ── Utilities ────────────────────────────────────────────────────────────────
 tenacity==8.3.0        # Exponential backoff for all external API calls
