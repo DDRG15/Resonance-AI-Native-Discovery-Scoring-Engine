@@ -11,9 +11,9 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Load .env file if it exists (local development).
-# In production/CI, variables are injected directly into the environment.
-load_dotenv()
+# Load .env anchored to this file's directory so it works regardless of
+# which directory the process was launched from (e.g. streamlit run from parent).
+load_dotenv(dotenv_path=Path(__file__).parent / ".env", override=True)
 
 
 # =============================================================================
@@ -29,7 +29,7 @@ PRIMARY_LLM: str = os.getenv("PRIMARY_LLM", "groq").lower()
 # Model identifiers
 GROQ_MODEL: str = "llama-3.3-70b-versatile"
 GEMINI_MODEL: str = "gemini-2.0-flash-lite"
-OPENROUTER_MODEL: str = "google/gemma-2-27b-it:free"
+OPENROUTER_MODEL: str = "google/gemma-2-27b-it"
 COHERE_MODEL: str = "command-r-plus"
 
 # LLM retry policy (exponential backoff via tenacity)
