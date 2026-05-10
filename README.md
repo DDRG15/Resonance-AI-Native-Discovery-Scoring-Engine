@@ -120,7 +120,54 @@ Key fields:
 
 `user_profile.yaml` is in `.gitignore` — it will never be committed or pushed.
 
-### 4. Run
+### 4. (Optional) Notion integration
+
+GEMA can push every job result to a Notion database as a Kanban card, color-coded by tier.
+
+1. Create a Notion integration at [notion.so/my-integrations](https://www.notion.so/my-integrations) and copy the API key
+2. Create a database in Notion with these exact columns:
+
+| Column | Type |
+|---|---|
+| Name | Title |
+| Company | Text |
+| URL | URL |
+| Tier | Select |
+| Match Score | Number |
+| Salary | Text |
+| Comments / Raw Salary | Text |
+| Source | Text |
+| Status | Select |
+
+3. Share the database with your integration (click ··· → Connections in Notion)
+4. Copy the database ID from the URL: `notion.so/[workspace]/`**`<database-id>`**`?v=...`
+5. Add to `.env`:
+
+```
+NOTION_API_KEY=secret_...
+NOTION_DATABASE_ID=...
+```
+
+If these are not set, the integration is silently disabled — nothing breaks.
+
+### 5. (Optional) Google Sheets integration
+
+GEMA appends every job to a Google Sheet for longitudinal analysis (salary trends, volume by month, etc.).
+
+1. Create a Google Cloud project and enable the Google Sheets API
+2. Create a service account and download the JSON key file
+3. Place the file at `credentials/google_service_account.json` (or set `GOOGLE_CREDENTIALS_PATH` in `.env`)
+4. Share your target Google Sheet with the service account's email address (edit access)
+5. Add to `.env`:
+
+```
+GOOGLE_SHEET_ID=...
+GOOGLE_CREDENTIALS_PATH=credentials/google_service_account.json
+```
+
+The sheet will auto-create its header row on first run. If these are not set, the integration is silently disabled.
+
+### 6. Run
 
 ```bash
 python -m streamlit run main.py
