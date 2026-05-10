@@ -548,6 +548,39 @@ SELECTORS: dict[str, DomainSelectors] = {
         ],
     ),
 
+    # ── Jobspresso ────────────────────────────────────────────────────────────
+    # WordPress + WP Job Manager. Clean HTML, minimal JS. Stable selectors.
+    "jobspresso.co": DomainSelectors(
+        domain               = "jobspresso.co",
+        search_url_template  = "https://jobspresso.co/remote-work/?search_keywords={title}",
+        wait_for_selector    = "li.job_listing",
+        last_verified        = "2026-05-10",
+        null_threshold       = 5,
+        job_card = [
+            "li.job_listing",
+            "article.job_listing",
+        ],
+        link = [
+            "a[href*='/remote-work/']",
+            "h3 a",
+            "li.job_listing > a",
+        ],
+        title = [
+            ".position",
+            "h3",
+            "h2",
+        ],
+        company = [
+            ".company",
+            "span[class*='company']",
+        ],
+        salary = [
+            ".salary",
+            "span[class*='salary']",
+        ],
+        next_page_btn = "a.next",
+    ),
+
     # ── Greenhouse Careers ────────────────────────────────────────────────────
     # Greenhouse's own company career page (not the ATS platform).
     # Static/Next.js. Limited listings but high-signal tech roles.
