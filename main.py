@@ -9,6 +9,7 @@ Architecture:
     log_queue bridges the async scraper thread to the sync Streamlit render loop.
 """
 
+import io
 import json
 import logging
 import queue
@@ -17,6 +18,8 @@ import threading
 import time
 import uuid
 from datetime import datetime, timezone
+
+import pandas as pd
 
 import streamlit as st
 
@@ -562,6 +565,40 @@ if st.session_state.scrape_results:
     _render_tier(tier2, "Tier 2 — Explore",                "🟡")
     _render_tier(tier3, "Tier 3 — Recycle Bin",            "🔴")
     _render_tier(tier4, "Tier 4 — Manual Review (Salary)", "🟣", show_score=False)
+
+    # ── Excel Export ──────────────────────────────────────────────────────────
+    all_tiered = (
+        [(tj, 1) for tj in tier1] +
+        [(tj, 2) for tj in tier2] +
+        [(tj, 3) for tj in tier3] +
+        [(tj, 4) for tj in tier4]
+    )
+    if all_tiered:
+        st.divider()
+        rows = []
+        for tj, tier_num in sorted(all_tiered, key=lambda x: x[0].match_score, reverse=True):
+            rows.append({
+                "Tier":         tier_num,
+                "Title":        tj.job.title,
+                "Company":      tj.job.company,
+                "Salary":       tj.job.salary_raw or "",
+                "Match Score":  tj.match_score if tj.match_score >= 0 else "Manual",
+                "Apply Link":   tj.job.url,
+                "Source":       tj.job.source_domain,
+                "Date Fetched": tj.job.scraped_at.strftime("%Y-%m-%d %H:%M UTC"),
+            })
+        df = pd.DataFrame(rows)
+        buf = io.BytesIO()
+        df.to_excel(buf, index=False, engine="openpyxl")
+        buf.seek(0)
+        run_id_short = st.session_state.get("run_id", "gema")[:8]
+        st.download_button(
+            label="📥 Download Results as Excel",
+            data=buf,
+            file_name=f"gema_results_{run_id_short}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
+        )
 
 # =============================================================================
 # Live Log Console (always visible at bottom)

@@ -240,6 +240,345 @@ SELECTORS: dict[str, DomainSelectors] = {
         ],
         next_page_btn = "a[rel='next']",
     ),
+
+    # ── RemoteOK ──────────────────────────────────────────────────────────────
+    # High anti-bot risk (Cloudflare). Will return 403/429 and be skipped
+    # gracefully by the rate-limit handler. Selectors kept for when it works.
+    "remoteok.com": DomainSelectors(
+        domain               = "remoteok.com",
+        search_url_template  = "https://remoteok.com/?q={title}",
+        wait_for_selector    = "tr.job[data-id]",
+        last_verified        = "2026-05-10",
+        null_threshold       = 3,
+        job_card = [
+            "tr.job[data-id]",
+            "tr[data-id]",
+        ],
+        link = [
+            "a.preventLink",
+            "a[href*='/remote-']",
+            "td.company a",
+        ],
+        title = [
+            "h2[itemprop='title']",
+            "h2.title",
+            "h2",
+        ],
+        company = [
+            "h3[itemprop='name']",
+            "h3.company",
+            "span.company",
+        ],
+        salary = [
+            "span.salary",
+            "div.salary",
+            "span[class*='salary']",
+        ],
+    ),
+
+    # ── WorkingNomads ─────────────────────────────────────────────────────────
+    # Traditional HTML, remote-first board. Stable selectors.
+    "workingnomads.com": DomainSelectors(
+        domain               = "workingnomads.com",
+        search_url_template  = "https://www.workingnomads.com/jobs?tag={title}",
+        wait_for_selector    = ".list-item",
+        last_verified        = "2026-05-10",
+        null_threshold       = 5,
+        job_card = [
+            ".list-item",
+            "div.job",
+            "li.job-item",
+        ],
+        link = [
+            "h3 a",
+            "a.job-title",
+            "a[href*='/jobs/']",
+        ],
+        title = [
+            "h3 a",
+            "h3",
+            ".position",
+        ],
+        company = [
+            ".company",
+            "span.company-name",
+            "p.company",
+        ],
+        salary = [
+            ".salary",
+            "span[class*='salary']",
+        ],
+        next_page_btn = "a[rel='next']",
+    ),
+
+    # ── Hacker News Jobs ──────────────────────────────────────────────────────
+    # Static HTML, no keyword search — {title} param is ignored by HN.
+    # Returns all current job posts from the /jobs page.
+    # No structured salary field. Company often embedded in title.
+    "news.ycombinator.com": DomainSelectors(
+        domain               = "news.ycombinator.com",
+        search_url_template  = "https://news.ycombinator.com/jobs?q={title}",
+        wait_for_selector    = ".itemlist",
+        last_verified        = "2026-05-10",
+        null_threshold       = 10,
+        job_card = [
+            "tr.athing",
+        ],
+        link = [
+            "span.titleline > a",
+            "td.title a",
+        ],
+        title = [
+            "span.titleline > a",
+            "td.title a",
+        ],
+        company = [
+            "span.sitestr",
+            "span.sitebit a",
+        ],
+        salary = [],
+    ),
+
+    # ── Wellfound (AngelList) ─────────────────────────────────────────────────
+    # Requires login to view full job listings. The scraper will timeout on
+    # wait_for_selector (login wall renders instead of job cards) and return []
+    # gracefully. No action needed — zero results is the expected outcome.
+    "wellfound.com": DomainSelectors(
+        domain               = "wellfound.com",
+        search_url_template  = "https://wellfound.com/jobs?q={title}&remote=true",
+        wait_for_selector    = "div[class*='JobListing']",
+        last_verified        = "2026-05-10",
+        null_threshold       = 2,
+        job_card = [
+            "div[class*='JobListing']",
+            "div[class*='styles_container']",
+            "div[data-test='job-row']",
+        ],
+        link = [
+            "a[data-test='job-link']",
+            "a[href*='/jobs/']",
+            "h2 a",
+        ],
+        title = [
+            "h2[class*='title']",
+            "span[class*='title']",
+            "h2",
+        ],
+        company = [
+            "h3[class*='company']",
+            "span[class*='company']",
+        ],
+        salary = [
+            "span[class*='salary']",
+            "span[class*='compensation']",
+        ],
+    ),
+
+    # ── Arc.dev ───────────────────────────────────────────────────────────────
+    # May require login for full results. Graceful timeout → [] if blocked.
+    "arc.dev": DomainSelectors(
+        domain               = "arc.dev",
+        search_url_template  = "https://arc.dev/remote-jobs?q={title}",
+        wait_for_selector    = "div[data-testid='job-card']",
+        last_verified        = "2026-05-10",
+        null_threshold       = 3,
+        job_card = [
+            "div[data-testid='job-card']",
+            "div[class*='JobCard']",
+            "li[class*='job']",
+        ],
+        link = [
+            "a[data-testid='job-link']",
+            "a[href*='/remote-jobs/']",
+            "h2 a",
+        ],
+        title = [
+            "h2[data-testid='job-title']",
+            "h2[class*='title']",
+            "h2",
+        ],
+        company = [
+            "span[data-testid='company-name']",
+            "p[class*='company']",
+            "span[class*='company']",
+        ],
+        salary = [
+            "span[class*='salary']",
+            "p[class*='compensation']",
+        ],
+    ),
+
+    # ── Builtin ───────────────────────────────────────────────────────────────
+    # React SPA, tech-focused US board. Filters to remote listings.
+    "builtin.com": DomainSelectors(
+        domain               = "builtin.com",
+        search_url_template  = "https://builtin.com/jobs/remote?search={title}",
+        wait_for_selector    = "div[data-id]",
+        last_verified        = "2026-05-10",
+        null_threshold       = 5,
+        job_card = [
+            "div[data-id]",
+            "div.job-card",
+            "li.job-listing-item",
+        ],
+        link = [
+            "a[data-id]",
+            "a[href*='/job/']",
+            "h2 a",
+        ],
+        title = [
+            "h2[class*='job-title']",
+            "a[class*='job-title']",
+            "h2",
+        ],
+        company = [
+            "div[class*='company-name']",
+            "span[class*='company']",
+            "a[class*='company']",
+        ],
+        salary = [
+            "span[class*='salary']",
+            "div[class*='salary']",
+        ],
+        next_page_btn = "a[aria-label='Next page']",
+    ),
+
+    # ── Welcome to the Jungle ─────────────────────────────────────────────────
+    # French-origin React SPA. May require account for full listings.
+    # Graceful timeout → [] if blocked by auth wall.
+    "welcometothejungle.com": DomainSelectors(
+        domain               = "welcometothejungle.com",
+        search_url_template  = "https://www.welcometothejungle.com/en/jobs?query={title}&remote=true",
+        wait_for_selector    = "article[data-testid='job-card']",
+        last_verified        = "2026-05-10",
+        null_threshold       = 3,
+        job_card = [
+            "article[data-testid='job-card']",
+            "li[data-testid='search-results-list-item-wrapper']",
+            "li[class*='sc-']",
+        ],
+        link = [
+            "a[data-testid='job-card-link']",
+            "a[href*='/en/companies/']",
+            "article a",
+        ],
+        title = [
+            "h3[class*='title']",
+            "h4[class*='title']",
+            "h3",
+        ],
+        company = [
+            "span[class*='company']",
+            "p[class*='company']",
+            "a[class*='company']",
+        ],
+        salary = [
+            "span[class*='salary']",
+            "li[class*='salary']",
+        ],
+    ),
+
+    # ── Remotivated ───────────────────────────────────────────────────────────
+    # Emerging remote job board. Best-effort selectors — verify after first run.
+    "remotivated.com": DomainSelectors(
+        domain               = "remotivated.com",
+        search_url_template  = "https://remotivated.com/jobs?q={title}",
+        wait_for_selector    = ".job-card",
+        last_verified        = "2026-05-10",
+        null_threshold       = 5,
+        job_card = [
+            ".job-card",
+            "div[class*='job']",
+            "li[class*='job']",
+            "article",
+        ],
+        link = [
+            "a[href*='/jobs/']",
+            "h2 a",
+            "h3 a",
+        ],
+        title = [
+            "h2",
+            "h3",
+            ".job-title",
+        ],
+        company = [
+            ".company",
+            "span[class*='company']",
+        ],
+        salary = [
+            ".salary",
+            "span[class*='salary']",
+        ],
+    ),
+
+    # ── PostHog Cool Tech Jobs ────────────────────────────────────────────────
+    # Curated list by PostHog — no keyword search, {title} param ignored.
+    # Next.js static page. Selectors may need God Mode adjustment.
+    "posthog.com": DomainSelectors(
+        domain               = "posthog.com",
+        search_url_template  = "https://posthog.com/cool-tech-jobs?q={title}",
+        wait_for_selector    = "main",
+        last_verified        = "2026-05-10",
+        null_threshold       = 5,
+        job_card = [
+            "li[class*='job']",
+            "div[class*='job']",
+            "article",
+            "li",
+        ],
+        link = [
+            "a[href*='jobs']",
+            "a[href*='careers']",
+            "li a",
+        ],
+        title = [
+            "h2",
+            "h3",
+            "span[class*='title']",
+        ],
+        company = [
+            "span[class*='company']",
+            "p[class*='company']",
+            "strong",
+        ],
+        salary = [
+            "span[class*='salary']",
+            "span[class*='compensation']",
+        ],
+    ),
+
+    # ── Greenhouse Careers ────────────────────────────────────────────────────
+    # Greenhouse's own company career page (not the ATS platform).
+    # Static/Next.js. Limited listings but high-signal tech roles.
+    "greenhouse.com": DomainSelectors(
+        domain               = "greenhouse.com",
+        search_url_template  = "https://www.greenhouse.com/careers/opportunities?q={title}",
+        wait_for_selector    = "main",
+        last_verified        = "2026-05-10",
+        null_threshold       = 5,
+        job_card = [
+            "div[class*='opening']",
+            "li[class*='opening']",
+            "div.job",
+            "li.job",
+        ],
+        link = [
+            "a[href*='/careers/']",
+            "a[href*='boards.greenhouse.io']",
+            "h2 a",
+        ],
+        title = [
+            "h2",
+            "h3",
+            "p[class*='title']",
+        ],
+        company = [
+            "span[class*='company']",
+            "p[class*='department']",
+        ],
+        salary = [],
+    ),
 }
 
 
