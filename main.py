@@ -413,9 +413,9 @@ if st.session_state.is_running:
     log_queue: queue.Queue = queue.Queue()
     result_holder: dict = {}
 
-    def _scraper_thread():
+    def _scraper_thread(search_config):
         jobs, summary = run_scrape_session(
-            st.session_state.search_config,
+            search_config,
             db,
             log_queue,
             ttl_hours,
@@ -428,7 +428,11 @@ if st.session_state.is_running:
         send_discord_alert(random.choice(START_PHRASES))
         st.session_state["start_webhook_sent"] = True
 
-    thread = threading.Thread(target=_scraper_thread, daemon=True)
+    thread = threading.Thread(
+        target=_scraper_thread,
+        args=(st.session_state.search_config,),
+        daemon=True,
+    )
     thread.start()
 
     # ── Non-blocking live log loop (Fix 3) ───────────────────────────────────
