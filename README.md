@@ -177,6 +177,51 @@ Open `http://localhost:8501` in your browser.
 
 ---
 
+## Local Deployment via Docker
+
+GEMA doesn't run bare-metal. The production-grade way to run it is through Docker Compose, which handles all system-level dependencies — including the headless Chromium OS libraries that Playwright requires — cleanly and reproducibly.
+
+### Why Docker
+
+Installing Playwright's Chromium dependencies directly on a host machine is fragile. The official Microsoft Playwright base image (`mcr.microsoft.com/playwright/python:v1.50.0-jammy`) ships with every required system library pre-installed. No `apt-get` hunting, no version conflicts, no "it works on my machine" problem.
+
+### Boot the system
+
+```bash
+docker compose up --build
+```
+
+First boot takes 2–3 minutes (downloads the base image, installs Python deps, installs Chromium). Subsequent starts are near-instant.
+
+### What Docker Compose does
+
+| Concern | How it's handled |
+|---|---|
+| API keys | `.env` file mounted at runtime — never baked into the image |
+| Database | `gema_registry.db` mounted as a persistent volume — survives container restarts with full WAL-mode integrity |
+| Chromium | Pre-installed in the base image — no manual `playwright install` |
+| Port | Container's `8501` mapped to host's `8501` |
+
+### Access the dashboard
+
+Once the container is up, open your browser and navigate to:
+
+```
+http://127.0.0.1:8501
+```
+
+or equivalently `http://localhost:8501`. The Streamlit UI loads immediately — no login, no setup screen.
+
+### Stop
+
+```bash
+docker compose down
+```
+
+The database volume persists. Your seen-jobs registry and search vault survive the shutdown and are immediately available on the next `docker compose up`.
+
+---
+
 ## How It Works
 
 1. I type a search in plain English — e.g. *"Backend Python engineer, remote, salary above peanuts $$$k"*
