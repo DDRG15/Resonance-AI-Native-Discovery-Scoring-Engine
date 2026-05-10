@@ -1,0 +1,45 @@
+# =============================================================================
+# .dockerignore — keeps secrets and junk out of the Docker build context
+# =============================================================================
+
+# Secrets — NEVER bake into the image
+.env
+.env.local
+credentials/
+
+# Git history
+.git
+.gitignore
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Database — mount as volume at runtime, don't bake stale data into image
+*.db
+*.db-shm
+*.db-wal
+*.bak
+
+# Logs
+*.log
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code internals
+.claude/
+
+# Misc
+*.xlsx
+*.csv
+pivot_instructions.txt

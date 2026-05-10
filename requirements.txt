@@ -5,7 +5,7 @@
 # =============================================================================
 
 # ── UI Layer ──────────────────────────────────────────────────────────────────
-streamlit==1.45.0
+streamlit==1.57.0
 
 # ── Data Validation (Contract Layer) ─────────────────────────────────────────
 pydantic==2.7.1
@@ -17,7 +17,7 @@ google-generativeai==0.8.3
 # ── Scraping Engine ───────────────────────────────────────────────────────────
 playwright==1.50.0
 # playwright-stealth patches navigator.webdriver + WebGL/Canvas fingerprints
-playwright-stealth==1.0.6
+playwright-stealth==2.0.3
 
 # ── Database ─────────────────────────────────────────────────────────────────
 # SQLite is built into Python — no package needed.
@@ -28,7 +28,7 @@ python-dotenv==1.0.1
 # ── Integrations ─────────────────────────────────────────────────────────────
 notion-client==2.2.1
 gspread==6.1.2
-google-auth==2.29.0
+google-auth==2.52.0
 
 # ── HTTP Client ──────────────────────────────────────────────────────────────
 requests==2.32.3       # Discord webhook delivery (send_discord_alert)

@@ -1,0 +1,20 @@
+# =============================================================================
+# docker-compose.yml — Project GEMA
+# Usage: docker compose up --build
+# =============================================================================
+
+services:
+  gema:
+    build: .
+    ports:
+      - "8501:8501"
+
+    # Load API keys from your local .env file — never baked into the image
+    env_file:
+      - .env
+
+    volumes:
+      # Persist the SQLite registry across container restarts
+      - ./gema_registry.db:/app/gema_registry.db
+
+    restart: unless-stopped
