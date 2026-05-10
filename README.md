@@ -24,7 +24,7 @@ User Prompt (natural language)
    AI Auditor  (LLM #2 cross-checks the config)
         │
         ▼
-   Playwright Scraper (15 domains, concurrent tabs)
+   Playwright Scraper (16 domains, concurrent tabs)
         │
         ▼
    LLM Extraction Chain (Groq → Gemini → OpenRouter → Cohere)
@@ -45,7 +45,7 @@ User Prompt (natural language)
 
 - **Natural language search** — I describe what I want in plain English, the LLM parses it into a validated `SearchConfig`
 - **4-provider LLM fallback chain** — Groq → Gemini → OpenRouter → Cohere. If one provider rate-limits or goes down, the next one picks up automatically
-- **15 job board scrapers** — himalayas.app, trueup.io, remote.co, weworkremotely.com, remoteok.com, workingnomads.com, news.ycombinator.com, wellfound.com, arc.dev, builtin.com, welcometothejungle.com, remotivated.com, posthog.com, greenhouse.com, jobspresso.co
+- **16 job board scrapers** — himalayas.app, trueup.io, remote.co, weworkremotely.com, remoteok.com, workingnomads.com, news.ycombinator.com, wellfound.com, arc.dev, builtin.com, welcometothejungle.com, remotivated.com, posthog.com, greenhouse.com, jobspresso.co, python.org/jobs
 - **Anti-bot resilience** — Playwright stealth, User-Agent spoofing, per-domain circuit breakers, jitter between requests
 - **Personalized scoring** — matches job tech stacks against a `user_profile.yaml` derived from my actual CV
 - **3-stage Discord notifications** — start phrase → extraction report → end phrase
@@ -277,7 +277,7 @@ gema/
 ├── models.py                # Pydantic contracts for all data
 ├── config.py                # Centralized env var loading
 ├── database.py              # SQLite WAL-mode async registry
-├── selectors_registry.py    # 15 domain scraping contracts
+├── selectors_registry.py    # 16 domain scraping contracts
 ├── user_profile.yaml        # CV-derived personalization config
 ├── integrations/
 │   ├── webhook_client.py    # Discord + Slack webhook logic

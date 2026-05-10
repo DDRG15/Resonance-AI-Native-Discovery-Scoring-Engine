@@ -612,6 +612,36 @@ SELECTORS: dict[str, DomainSelectors] = {
         ],
         salary = [],
     ),
+
+    # ── Python.org Jobs ───────────────────────────────────────────────────────
+    # Official Python job board. Static HTML, highly stable selectors.
+    # Keyword search supported via ?q= param. No salary field published.
+    "python.org": DomainSelectors(
+        domain               = "python.org",
+        search_url_template  = "https://www.python.org/jobs/?q={title}",
+        wait_for_selector    = "ol.list-recent-jobs",
+        last_verified        = "2026-05-10",
+        null_threshold       = 5,
+        job_card = [
+            "ol.list-recent-jobs li",
+            "ol.list-recent-jobs article",
+        ],
+        link = [
+            "h2 a",
+            "a[href*='/jobs/']",
+        ],
+        title = [
+            "h2 a",
+            "h2",
+        ],
+        company = [
+            "span.listing-company-name",
+            ".company",
+            "span[class*='company']",
+        ],
+        salary = [],
+        next_page_btn = "a[rel='next']",
+    ),
 }
 
 
