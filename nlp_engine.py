@@ -290,7 +290,7 @@ def _call_openrouter(messages: list[dict]) -> str:
         resp = requests.post(
             "https://openrouter.ai/api/v1/chat/completions",
             headers={
-                "Authorization": f"Bearer {config.OPENROUTER_API_KEY}",
+                "Authorization": f"Bearer {os.getenv('OPENROUTER_API_KEY')}",
                 "Content-Type": "application/json",
             },
             json={
@@ -344,9 +344,9 @@ def _call_cohere(messages: list[dict]) -> str:
         if chat_history:
             payload["chat_history"] = chat_history
         resp = requests.post(
-            "https://api.cohere.com/v1/chat",
+            "https://api.cohere.ai/v1/chat",
             headers={
-                "Authorization": f"Bearer {config.COHERE_API_KEY}",
+                "Authorization": f"Bearer {os.getenv('COHERE_API_KEY')}",
                 "Content-Type": "application/json",
             },
             json=payload,
@@ -382,7 +382,7 @@ def _call_openrouter_plain(prompt: str) -> str:
         resp = requests.post(
             "https://openrouter.ai/api/v1/chat/completions",
             headers={
-                "Authorization": f"Bearer {config.OPENROUTER_API_KEY}",
+                "Authorization": f"Bearer {os.getenv('OPENROUTER_API_KEY')}",
                 "Content-Type": "application/json",
             },
             json={
@@ -418,9 +418,9 @@ def _call_cohere_plain(prompt: str) -> str:
         raise _ProviderRateLimited("Cohere API key not configured")
     try:
         resp = requests.post(
-            "https://api.cohere.com/v1/chat",
+            "https://api.cohere.ai/v1/chat",
             headers={
-                "Authorization": f"Bearer {config.COHERE_API_KEY}",
+                "Authorization": f"Bearer {os.getenv('COHERE_API_KEY')}",
                 "Content-Type": "application/json",
             },
             json={
