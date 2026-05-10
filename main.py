@@ -238,6 +238,19 @@ with st.sidebar:
     if st.button("🔴 Reset Session (Kill Switch)", use_container_width=True):
         _reset_session()
 
+    # ── Selector Staleness Warnings ───────────────────────────────────────────
+    stale = [
+        sel.domain
+        for sel in selectors_registry.SELECTORS.values()
+        if selectors_registry.is_selector_stale(sel)
+    ]
+    if stale:
+        st.divider()
+        st.warning(
+            f"⚠️ Selectors may be stale (>30 days) for: {', '.join(stale)}. "
+            "Verify or use God Mode."
+        )
+
     # ── Integrations Status ───────────────────────────────────────────────────
     st.divider()
     st.caption("Integrations")

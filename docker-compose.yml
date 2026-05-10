@@ -16,5 +16,7 @@ services:
     volumes:
       # Persist the SQLite registry across container restarts
       - ./gema_registry.db:/app/gema_registry.db
+      # Mount credentials read-only — JSON key file never baked into the image
+      - ./credentials:/app/credentials:ro
 
     restart: unless-stopped
