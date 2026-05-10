@@ -99,7 +99,28 @@ COHERE_API_KEY=
 DISCORD_WEBHOOK_URL=
 ```
 
-### 3. Run
+### 3. Create your profile
+
+This is the part that makes GEMA personal. The extraction prompt is built around a YAML file that describes your skills, location, and projects. Without it, `cv_match_score` falls back to generic defaults and becomes useless.
+
+```bash
+cp user_profile.yaml.example user_profile.yaml
+# Edit user_profile.yaml with your own CV data
+```
+
+Key fields:
+
+| Field | What it does |
+|---|---|
+| `location` / `timezone` | Used to flag remote-only or timezone-restricted roles |
+| `role` | Sets the framing for what counts as a match |
+| `core_skills` | Scored against the job's tech stack to produce `cv_match_score` |
+| `key_projects` | Injected into the prompt so the LLM understands your engineering identity |
+| `audit_signals` | Keywords that, when found in a job description, push the match score above 0.8 |
+
+`user_profile.yaml` is in `.gitignore` — it will never be committed or pushed.
+
+### 4. Run
 
 ```bash
 python -m streamlit run main.py
@@ -278,7 +299,7 @@ gema/
 ├── config.py                # Centralized env var loading
 ├── database.py              # SQLite WAL-mode async registry
 ├── selectors_registry.py    # 16 domain scraping contracts
-├── user_profile.yaml        # CV-derived personalization config
+├── user_profile.yaml.example  # Template — copy to user_profile.yaml and fill with your CV
 ├── integrations/
 │   ├── webhook_client.py    # Discord + Slack webhook logic
 │   ├── notion_client.py     # Notion API push

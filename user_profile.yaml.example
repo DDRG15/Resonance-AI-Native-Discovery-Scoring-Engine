@@ -1,0 +1,31 @@
+# user_profile.yaml — GEMA Personalization Context
+# Copy this file to user_profile.yaml and fill it with your own CV data.
+# The NLP engine reads this at startup and injects it into every extraction prompt.
+# This file drives cv_match_score — without it, matching falls back to generic defaults.
+#
+# IMPORTANT: user_profile.yaml is in .gitignore. Never commit it.
+
+location: 'Your City, Country'
+timezone: 'Your Timezone / UTC offset (e.g. EST / UTC-5)'
+role: 'Your role titles (e.g. Backend Engineer | SRE | DevOps)'
+
+core_skills:
+  - Python
+  - Docker
+  - SQL
+  # Add every technology from your CV here — the LLM scores jobs against this list
+
+key_projects:
+  - name: Project Name
+    description: One-line description of what it does and the engineering mentality behind it
+  - name: Another Project
+    description: Focus on patterns that make you distinctive (reliability, security, performance, etc.)
+
+# Optional: keywords that, when found in a job description, should push cv_match_score above 0.8
+# Add terms that define your engineering identity
+audit_signals:
+  - audit logs
+  - data integrity
+  - ACID compliance
+  - SRE
+  # Add your own signal keywords here
