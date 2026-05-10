@@ -49,7 +49,7 @@ JITTER_MAX: float = float(os.getenv("JITTER_MAX_SECONDS", "15"))
 CIRCUIT_BREAKER_THRESHOLD: int = int(os.getenv("CIRCUIT_BREAKER_THRESHOLD", "3"))
 
 # Maximum consecutive HTTP 429/403 before aborting full run
-MAX_RATE_LIMIT_HITS: int = int(os.getenv("MAX_RATE_LIMIT_HITS", "5"))
+MAX_RATE_LIMIT_HITS: int = int(os.getenv("MAX_RATE_LIMIT_HITS", "50"))
 
 # Per-page timeout in milliseconds (30s — from Vol 1.4, Risk 2.2)
 PAGE_TIMEOUT_MS: int = 30_000

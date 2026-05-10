@@ -389,6 +389,11 @@ class GemaScraper:
             context: BrowserContext = await browser.new_context(
                 viewport={"width": 1280, "height": 800},
                 locale="en-US",
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/124.0.0.0 Safari/537.36"
+                ),
                 ignore_https_errors=os.getenv("IGNORE_HTTPS_ERRORS", "False").lower() == "true",
             )
 
