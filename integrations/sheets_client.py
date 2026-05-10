@@ -46,13 +46,13 @@ class SheetsClient:
             from google.oauth2.service_account import Credentials
 
             scopes = [
-                "https://spreadsheets.google.com/feeds",
+                "https://www.googleapis.com/auth/spreadsheets",
                 "https://www.googleapis.com/auth/drive",
             ]
             creds = Credentials.from_service_account_file(
                 self.credentials_path, scopes=scopes
             )
-            client = gspread.authorize(creds)
+            client = gspread.Client(auth=creds)
             self._sheet = client.open_by_key(self.sheet_id).sheet1
             logger.info("Google Sheets client initialized.")
 
@@ -106,27 +106,38 @@ class SheetsClient:
             logger.error("Sheet append failed: %s", exc)
             raise
 
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=10))
     def append_batch(
         self,
         tiered_jobs: list[TieredJob],
         summary: Optional[ScrapeRunSummary] = None,
     ) -> dict:
         """
-        Appends all jobs in a single batch for efficiency.
+        Appends all jobs in a single API call for efficiency.
         Returns summary: {"appended": N, "failed": N}
         """
         if not self.is_enabled:
             return {"appended": 0, "failed": len(tiered_jobs)}
 
         run_id = summary.run_id if summary else ""
-        appended, failed = 0, 0
+        rows = [
+            [
+                tj.job.scraped_at.isoformat(),
+                tj.job.title,
+                tj.job.company,
+                tj.job.salary_raw or "",
+                tj.job.url,
+                tj.tier,
+                tj.match_score if tj.match_score >= 0 else "",
+                run_id,
+            ]
+            for tj in tiered_jobs
+        ]
 
-        for tj in tiered_jobs:
-            try:
-                self.append_job(tj, run_id)
-                appended += 1
-            except Exception:
-                failed += 1
-
-        logger.info("Sheets batch: appended=%d, failed=%d", appended, failed)
-        return {"appended": appended, "failed": failed}
+        try:
+            self._sheet.append_rows(rows, value_input_option="RAW")
+            logger.info("Sheets batch: appended=%d", len(rows))
+            return {"appended": len(rows), "failed": 0}
+        except Exception as exc:
+            logger.error("Sheets batch append failed: %s", exc)
+            raise
