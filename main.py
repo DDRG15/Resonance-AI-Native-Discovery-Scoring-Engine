@@ -29,7 +29,7 @@ from integrations import NotionClient, SheetsClient
 from integrations.webhook_client import send_discord_alert
 from matcher import bucket_jobs
 from models import SearchConfig, SearchVaultEntry, ScrapeRunSummary
-from nlp_engine import parse_prompt_to_config, generate_and_audit_config
+from nlp_engine import parse_prompt_to_config, generate_and_audit_config, reset_rate_limit_flags
 from scraper import run_scrape_session
 import selectors_registry
 
@@ -432,6 +432,9 @@ if st.session_state.is_running:
         )
         result_holder["jobs"]    = jobs
         result_holder["summary"] = summary
+
+    # Reset LLM rate-limit flags so providers blocked in a previous run are retried
+    reset_rate_limit_flags()
 
     # Stage 1 — notify Discord that the run has started (fires exactly once per run)
     if not st.session_state.get("start_webhook_sent", False):

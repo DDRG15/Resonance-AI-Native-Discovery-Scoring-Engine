@@ -30,8 +30,9 @@ ENV/
 *.db-wal
 *.bak
 
-# Credentials
-credentials/
+# Credentials — ignore the key files but track the directory itself
+credentials/*.json
+credentials/*.p12
 *.json
 !requirements*.json
 

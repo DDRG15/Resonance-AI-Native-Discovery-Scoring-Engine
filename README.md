@@ -367,14 +367,47 @@ gema/
 
 ---
 
-## Roadmap
+## What's Next
 
-- [ ] Per-domain jitter profiles (some boards need longer waits)
-- [ ] Selector staleness alerts in sidebar (wired but not surfaced yet)
-- [ ] Multi-page pagination support
-- [ ] Credential-based login for wellfound and arc.dev
-- [ ] Scheduled runs (cron-style, no manual trigger)
-- [ ] Email digest as alternative to Discord
+These are the improvements I know need to happen, roughly in priority order.
+
+### Anti-Bot & Scraping
+
+- **Per-domain jitter profiles** — RemoteOK and Cloudflare-heavy boards need 15–20s delays between requests; python.org can handle 2s. Currently all domains share the same global `JITTER_MIN/MAX` ceiling.
+- **Rotating proxy support** — a residential proxy pool would bypass Cloudflare blocks that stealth mode alone can't handle. RemoteOK is effectively dead weight right now because of this.
+- **WebGL / Canvas fingerprint randomization** — `playwright-stealth` patches the main vectors but a determined Cloudflare check can still fingerprint via WebGL renderer strings and canvas noise. Proper randomization per-context would close that gap.
+- **Multi-page pagination** — the `next_page_btn` selectors are already defined in the registry for most boards. The scraper only hits page 1. Boards like himalayas and weworkremotely have 5–10 pages of results I'm not seeing.
+
+### Login-Gated Boards
+
+Three boards I want to unlock that currently return zero results because they require an account:
+
+- **Wellfound (AngelList)** — best startup job board. Needs session cookie injection or OAuth flow.
+- **Arc.dev** — high-signal remote tech roles. Same auth wall problem.
+- **Welcome to the Jungle** — strong European remote market. Partial results without auth, full listings require account.
+
+The plan: store encrypted session cookies in `.env` and inject them at `BrowserContext` creation. No credential hardcoding.
+
+### Scheduling
+
+- **Cron-style scheduled runs** — right now GEMA only runs when I manually trigger it. I want it to run at 8am and 6pm daily without me touching the UI. APScheduler wired into the Streamlit app, or a standalone daemon that writes results to the database.
+
+### Notifications
+
+- **Email digest** — a daily HTML email summary as an alternative to Discord. Not everyone wants their phone pinged at 8am by a webhook. Resend or SendGrid for delivery, templated with tier breakdown and top matches.
+- **Slack formatting improvements** — the current Block Kit payload works but the layout is dense. Better formatting with salary prominently displayed and a direct apply button.
+
+### UI
+
+- **Sort and filter results** — currently results render in scrape order. I want sortable columns (by score, salary, company), filter by tier, and search within results.
+- **Selector staleness warning** — `is_selector_stale()` is already implemented and returns True when a domain's selectors are > 30 days old. It's just not surfaced in the sidebar yet. One `st.warning()` call away.
+- **Per-run history** — a tab that shows past runs with their tier counts and timestamps, pulled from the registry stats the DB already tracks.
+- **Match reason display** — the `match_reasons` and `miss_reasons` fields are already populated per job but not shown in the UI. An expandable section per card would make the scoring transparent.
+
+### Infrastructure
+
+- **Credential-based Google Sheets auth** — currently requires a service account JSON file. OAuth2 device flow would be cleaner for personal use and removes the need to manage a service account.
+- **Multi-user support** — right now the profile is hardcoded to one `user_profile.yaml`. With a login layer and per-user profiles, this could run as a shared tool.
 
 ---
 

@@ -473,6 +473,15 @@ def _parse_and_validate(raw: str) -> SearchConfig:
 # Public Interface
 # =============================================================================
 
+def reset_rate_limit_flags() -> None:
+    """Resets all provider rate-limit flags. Call at the start of each new run."""
+    global _groq_rate_limited, _gemini_rate_limited, _openrouter_rate_limited, _cohere_rate_limited
+    _groq_rate_limited = False
+    _gemini_rate_limited = False
+    _openrouter_rate_limited = False
+    _cohere_rate_limited = False
+
+
 def parse_prompt_to_config(
     user_prompt: str,
     log_callback=None,
@@ -681,9 +690,13 @@ def generate_and_audit_config(
 # Job Description Extraction Prompt — Personalized Advisor Edition
 # =============================================================================
 
+import functools
+
+@functools.lru_cache(maxsize=1)
 def _build_extraction_prompt() -> str:
     """
     Builds the extraction system prompt with user_profile.yaml injected.
+    Cached after first call — the YAML doesn't change during a session.
     Falls back to hardcoded defaults if the YAML is missing or unreadable.
     """
     import yaml
