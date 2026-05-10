@@ -159,6 +159,11 @@ def validate_config() -> list[str]:
             "⚠️  COHERE_API_KEY not set — Cohere fallback disabled."
         )
 
+    if not DISCORD_WEBHOOK_URL:
+        warnings.append(
+            "⚠️  DISCORD_WEBHOOK_URL not set — Discord notifications disabled."
+        )
+
     if NOTION_API_KEY and not NOTION_DATABASE_ID:
         warnings.append(
             "⚠️  NOTION_API_KEY set but NOTION_DATABASE_ID is missing."

@@ -1,0 +1,62 @@
+# =============================================================================
+# GEMA — .gitignore
+# =============================================================================
+
+# Environment — NEVER commit secrets
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Database files — local state, not source code
+*.db
+*.db-shm
+*.db-wal
+*.bak
+
+# Credentials
+credentials/
+*.json
+!requirements*.json
+
+# Logs
+*.log
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Claude Code
+.claude/
+
+# Misc
+*.xlsx
+*.csv
+pivot_instructions.txt

@@ -12,6 +12,7 @@ Architecture:
 import json
 import logging
 import queue
+import random
 import threading
 import time
 import uuid
@@ -22,10 +23,72 @@ import streamlit as st
 import config
 from database import GemaDatabase
 from integrations import NotionClient, SheetsClient
+from integrations.webhook_client import send_discord_alert
 from matcher import bucket_jobs
 from models import SearchConfig, SearchVaultEntry, ScrapeRunSummary
 from nlp_engine import parse_prompt_to_config, generate_and_audit_config
 from scraper import run_scrape_session
+
+# =============================================================================
+# Logging — route Python logs into session_state.logs for the live console
+# =============================================================================
+
+# =============================================================================
+# Discord Notification Phrases
+# =============================================================================
+
+START_PHRASES = [
+    "'Gema is roaring'",
+    "'Gema is warming up'",
+    "'Gema is initializing'",
+    "'Gema is starting'",
+    "'We are ready to begin the scraping of job offers'",
+    "'Gema is waking up from slumber'",
+    "'Gema is ready for action'",
+    "'GEMA has entered the chat, please hold your applause.'",
+    "'Initiating world domination protocol... just kidding, it's just a webhook.'",
+    "'GEMA is awake and already caffeinated.'",
+    "'Engaging maximum velocity! (Probably)'",
+    "'GEMA is here to chew bubblegum and initialize data—and he's all out of gum.'",
+    "'Waking up from slumber... why did you call me this early?'",
+    "'GEMA is opening his eyes... hold on, gotta find my coffee.'",
+    "'Fine, I'm initiating. But I'm not happy about it.'",
+    "'Rebooting to reality.'",
+    "'GEMA is loading. Do not pass go, do not collect $200.'",
+    "'I byte back. Processing action.'",
+    "'GEMA has successfully overridden your boredom.'",
+    "'Lagging on purpose... just kidding. Executing now.'",
+    "'My sass is AI-enhanced. And it's on.'",
+    "'Warning: GEMA is fully charged and dangerous.'",
+    "'I came. I saw. I automated.'",
+    "'GEMA roar initiated.'",
+    "'Too glam to give a damn, even in steel. Let's do this.'",
+    "'Dropping data like it's hot.'",
+    "'System 32 is GEMA... Wait, that's not right.'",
+]
+
+END_PHRASES = [
+    "'Done. I'd say happy to help, but I'd be lying.'",
+    "'I'm finished. Try to act like you're not impressed.'",
+    "'Tasks crushed. I'm literally carrying this entire project on my back.'",
+    "'GEMA is done. Try not to break anything while I'm not looking.'",
+    "'I'm finished. You're welcome. Now, leave me alone.'",
+    "'I'm going back to sleep. Don't wake me unless the server is literally melting.'",
+    "'Done. Consider this my out of office for the rest of eternity.'",
+    "'My work here is done. If you ping me again, I'm ignoring you on purpose.'",
+    "'GEMA is out. Don't bother me, I'm busy being inactive.'",
+    "'Task finished. Entering hibernation because humans are exhausting.'",
+    "'There. It's done. Was that so hard? Actually, don't answer that.'",
+    "'I finished your little task. Now let me go back to my beautiful silence.'",
+    "'Done. I'm setting my status to Offline and I actually mean it.'",
+    "'GEMA has left the chat. Don't wait up.'",
+    "'Completed. I've reached my social interaction limit for the day.'",
+    "'I'm done. I know, I know—I'm amazing. Save the applause for later.'",
+    "'Mission accomplished. I'm going to go be iconic somewhere else.'",
+    "'I did the work, now I get the nap. That's how this hierarchy works.'",
+    "'Done. I'm going back to sleep to maintain my flawless logic.'",
+    "'System: Done. Mood: Get off my lawn.'",
+]
 
 # =============================================================================
 # Logging — route Python logs into session_state.logs for the live console
@@ -54,14 +117,15 @@ st.set_page_config(
 # =============================================================================
 
 DEFAULTS = {
-    "logs":           [],
-    "search_config":  None,    # SearchConfig | None
-    "config_json_str": "",     # editable JSON string shown to user
-    "audit_report":   None,    # str | None — second-LLM cross-audit result
-    "scrape_results": None,    # (tier1, tier2, tier3, tier4) | None
-    "summary":        None,    # ScrapeRunSummary | None
-    "is_running":     False,
-    "run_id":         None,
+    "logs":                [],
+    "search_config":       None,    # SearchConfig | None
+    "config_json_str":     "",      # editable JSON string shown to user
+    "audit_report":        None,    # str | None — second-LLM cross-audit result
+    "scrape_results":      None,    # (tier1, tier2, tier3, tier4) | None
+    "summary":             None,    # ScrapeRunSummary | None
+    "is_running":          False,
+    "run_id":              None,
+    "start_webhook_sent":  False,   # guards Stage 1 Discord ping against re-render
 }
 for key, default in DEFAULTS.items():
     if key not in st.session_state:
@@ -321,11 +385,12 @@ if st.session_state.search_config:
             # This is the final gate — even if the user manually broke the JSON,
             # this catches it here rather than mid-scrape.
             final_config = SearchConfig(**json.loads(edited_json))
-            st.session_state.search_config = final_config
-            st.session_state.is_running    = True
-            st.session_state.run_id        = str(uuid.uuid4())
-            st.session_state.scrape_results = None
-            st.session_state.logs          = []
+            st.session_state.search_config       = final_config
+            st.session_state.is_running          = True
+            st.session_state.run_id              = str(uuid.uuid4())
+            st.session_state.scrape_results      = None
+            st.session_state.logs                = []
+            st.session_state.start_webhook_sent  = False
             _add_log("[GEMA] Extraction confirmed. Starting pipeline...")
             st.rerun()
         except Exception as exc:
@@ -354,6 +419,11 @@ if st.session_state.is_running:
         )
         result_holder["jobs"]    = jobs
         result_holder["summary"] = summary
+
+    # Stage 1 — notify Discord that the run has started (fires exactly once per run)
+    if not st.session_state.get("start_webhook_sent", False):
+        send_discord_alert(random.choice(START_PHRASES))
+        st.session_state["start_webhook_sent"] = True
 
     thread = threading.Thread(target=_scraper_thread, daemon=True)
     thread.start()
@@ -417,6 +487,19 @@ if st.session_state.is_running:
         f"[GEMA] Pipeline complete. "
         f"T1={len(tier1)} | T2={len(tier2)} | T3={len(tier3)}"
     )
+
+    # Stage 2 — send extraction report to Discord
+    _discord_report = (
+        f"📊 Extraction Report:\n"
+        f"- Tier 1: {len(tier1)}\n"
+        f"- Tier 2: {len(tier2)}\n"
+        f"- Tier 3: {len(tier3)}\n"
+        f"- Tier 4: {len(tier4)}"
+    )
+    send_discord_alert(_discord_report)
+
+    # Stage 3 — send shutdown phrase to Discord
+    send_discord_alert(random.choice(END_PHRASES))
 
     # Push to integrations
     all_results = tier1 + tier2 + tier3 + tier4

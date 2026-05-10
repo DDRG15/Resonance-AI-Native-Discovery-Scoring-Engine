@@ -40,10 +40,31 @@ import urllib.request
 from datetime import datetime, timezone
 from typing import Optional
 
+import requests
+
 import config
 from models import TieredJob, ScrapeRunSummary
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Simple Alert Helper — synchronous, fire-and-forget
+# =============================================================================
+
+def send_discord_alert(message: str) -> None:
+    """Sends a plain-text message to the configured Discord webhook. Never raises."""
+    if not config.DISCORD_WEBHOOK_URL:
+        return
+    try:
+        resp = requests.post(
+            config.DISCORD_WEBHOOK_URL,
+            json={"content": message},
+            timeout=5,
+        )
+        resp.raise_for_status()
+    except Exception as exc:
+        logger.warning("Discord alert failed: %s", exc)
 
 
 # =============================================================================
