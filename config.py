@@ -192,6 +192,7 @@ def validate_config() -> list[str]:
 # Analysis: 3 is the RAM/CPU sweet spot on a 2-core Docker host.
 # At 3 tabs: ~440MB RAM, CPU stays under 85%. At 5: timeout cascade risk.
 SCRAPER_CONCURRENCY: int = int(os.getenv("SCRAPER_CONCURRENCY", "3"))
+IGNORE_HTTPS_ERRORS: bool = os.getenv("IGNORE_HTTPS_ERRORS", "False").lower() == "true"
 
 # Write-queue flush policy for the async DB writer task
 DB_WRITE_BATCH_SIZE: int    = int(os.getenv("DB_WRITE_BATCH_SIZE", "10"))

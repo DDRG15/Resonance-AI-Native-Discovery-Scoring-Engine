@@ -236,7 +236,7 @@ class TieredJob(BaseModel):
             "that bypass mathematical scoring entirely."
         ),
     )
-    tier: str = Field(..., description="'Tier 1', 'Tier 2', or 'Tier 3'.")
+    tier: str = Field(..., description="'Tier 1', 'Tier 2', 'Tier 3', or 'Tier 4'.")
     match_reasons: list[str] = Field(
         default_factory=list,
         description="Human-readable list of which criteria matched.",

@@ -315,7 +315,7 @@ class GemaScraper:
         run_in_executor wraps the synchronous mark_seen_batch() call so the
         event loop is not blocked during the disk write (typically < 5ms).
         """
-        loop   = asyncio.get_event_loop()
+        loop   = asyncio.get_running_loop()
         batch: list[JobResult] = []
 
         async def _flush(b: list) -> None:
@@ -394,7 +394,7 @@ class GemaScraper:
                     "AppleWebKit/537.36 (KHTML, like Gecko) "
                     "Chrome/124.0.0.0 Safari/537.36"
                 ),
-                ignore_https_errors=os.getenv("IGNORE_HTTPS_ERRORS", "False").lower() == "true",
+                ignore_https_errors=config.IGNORE_HTTPS_ERRORS,
             )
 
             # Block 3rd-party assets at context level (applies to all pages)
@@ -573,7 +573,7 @@ class GemaScraper:
             3. Check db.is_seen via run_in_executor (DB read, WAL-safe)
             4. If new: extract full metadata, enqueue to write_queue
         """
-        loop  = asyncio.get_event_loop()
+        loop  = asyncio.get_running_loop()
         jobs: list[JobResult] = []
 
         # Try fallback chain for the job card container selector

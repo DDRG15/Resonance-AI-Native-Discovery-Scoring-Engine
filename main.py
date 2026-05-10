@@ -136,8 +136,12 @@ for key, default in DEFAULTS.items():
         st.session_state[key] = default
 
 db = GemaDatabase()
-notion = NotionClient()
-sheets = SheetsClient()
+
+@st.cache_resource
+def _get_integrations():
+    return NotionClient(), SheetsClient()
+
+notion, sheets = _get_integrations()
 
 # =============================================================================
 # Helpers
