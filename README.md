@@ -47,7 +47,7 @@ User Prompt (natural language)
 - **4-provider LLM fallback chain** — Groq → Gemini → OpenRouter → Cohere. If one provider rate-limits or goes down, the next one picks up automatically
 - **16 job board scrapers** — himalayas.app, trueup.io, remote.co, weworkremotely.com, remoteok.com, workingnomads.com, news.ycombinator.com, wellfound.com, arc.dev, builtin.com, welcometothejungle.com, remotivated.com, posthog.com, greenhouse.com, jobspresso.co, python.org/jobs
 - **Anti-bot resilience** — Playwright stealth, User-Agent spoofing, per-domain circuit breakers, jitter between requests
-- **Personalized scoring** — matches job tech stacks against a `user_profile.yaml` derived from my actual CV
+- **Ephemeral CV identity** — upload a PDF, DOCX, TXT, or MD file at runtime; Gemini parses it into a sanitized profile dict used to personalize `cv_match_score` and skill-overlap scoring. Nothing is stored to disk — the profile lives in Streamlit session state only and is discarded when the tab closes
 - **3-stage Discord notifications** — start phrase → extraction report → end phrase
 - **Excel export** — one-click `.xlsx` download sorted by match score
 - **Notion + Google Sheets** integration for persistent tracking
@@ -69,6 +69,7 @@ User Prompt (natural language)
 | Notifications | Discord Webhooks |
 | Retry logic | Tenacity (exponential backoff) |
 | HTTP | requests, urllib |
+| Testing | pytest (LLM callers mocked — zero real API calls) |
 
 ---
 
@@ -99,26 +100,21 @@ COHERE_API_KEY=
 DISCORD_WEBHOOK_URL=
 ```
 
-### 3. Create your profile
+### 3. Upload your CV (in the UI)
 
-This is the part that makes GEMA personal. The extraction prompt is built around a YAML file that describes your skills, location, and projects. Without it, `cv_match_score` falls back to generic defaults and becomes useless.
+No YAML file to edit. Once the app is running, expand the **Your Profile** section in the left sidebar and upload your CV (PDF, DOCX, TXT, or MD). Gemini parses it once per file — a SHA-256 hash guard prevents re-calling the API on every Streamlit re-render.
 
-```bash
-cp user_profile.yaml.example user_profile.yaml
-# Edit user_profile.yaml with your own CV data
-```
-
-Key fields:
+The parsed profile drives:
 
 | Field | What it does |
 |---|---|
-| `location` / `timezone` | Used to flag remote-only or timezone-restricted roles |
+| `location` | Used to flag remote-only or timezone-restricted roles |
 | `role` | Sets the framing for what counts as a match |
-| `core_skills` | Scored against the job's tech stack to produce `cv_match_score` |
-| `key_projects` | Injected into the prompt so the LLM understands your engineering identity |
+| `core_skills` | Scored against the job's tech stack to produce `cv_match_score` and skill-overlap bonus |
+| `key_projects` | Injected into the extraction prompt so the LLM understands your engineering identity |
 | `audit_signals` | Keywords that, when found in a job description, push the match score above 0.8 |
 
-`user_profile.yaml` is in `.gitignore` — it will never be committed or pushed.
+The profile exists only in session memory — nothing is written to disk. Removing the file from the uploader clears it immediately.
 
 ### 4. (Optional) Notion integration
 
@@ -385,17 +381,20 @@ The AI's domain selection is discarded entirely. All 14 boards get hit every run
 gema/
 ├── main.py                  # Streamlit UI — the command center
 ├── scraper.py               # Playwright async scraper engine
-├── nlp_engine.py            # LLM extraction and audit logic
-├── matcher.py               # CV-vs-job scoring and tier bucketing
+├── nlp_engine.py            # LLM extraction, CV parsing, ephemeral profile generation
+├── matcher.py               # CV-vs-job scoring, skill-overlap bonus, tier bucketing
 ├── models.py                # Pydantic contracts for all data
 ├── config.py                # Centralized env var loading
 ├── database.py              # SQLite WAL-mode async registry
+├── gema_industrial.py       # Headless batch scraper (--cv PATH for profile-aware runs)
 ├── selectors_registry.py    # 16 domain scraping contracts
-├── user_profile.yaml.example  # Template — copy to user_profile.yaml and fill with your CV
 ├── integrations/
 │   ├── webhook_client.py    # Discord + Slack webhook logic
 │   ├── notion_client.py     # Notion API push
 │   └── sheets_client.py     # Google Sheets append
+├── tests/
+│   ├── conftest.py          # pytest sys.path setup
+│   └── test_extraction.py   # 9 tests — extract_jobs_from_text, skip_invalid_jobs, _score_skill_overlap
 ├── .env.example             # Template — copy to .env
 ├── requirements.txt
 └── README.md
@@ -453,6 +452,20 @@ The plan: store encrypted session cookies in `.env` and inject them at `BrowserC
 
 - **Credential-based Google Sheets auth** — currently requires a service account JSON file. OAuth2 device flow would be cleaner for personal use and removes the need to manage a service account.
 - **Multi-user support** — right now the profile is hardcoded to one `user_profile.yaml`. With a login layer and per-user profiles, this could run as a shared tool.
+
+---
+
+---
+
+### Bug 10 — `ImportError: cannot import name 'DEFAULT_EXCLUDED_CONTENT_TYPES'` on startup
+
+**What happened:** `streamlit run main.py` crashed immediately with `ImportError: cannot import name 'DEFAULT_EXCLUDED_CONTENT_TYPES' from 'starlette.middleware.gzip'`. The app would not start at all.
+
+**Root cause:** `starlette==0.38.6` was installed in the environment. `streamlit==1.57.0` requires `starlette>=0.40.0` — the name `DEFAULT_EXCLUDED_CONTENT_TYPES` was introduced in `0.40.0`. pip's resolver did not catch the conflict because `starlette` was previously pinned by another project in the same environment.
+
+**The fix:** Upgraded to `starlette==0.41.3` and explicitly pinned it in `requirements.txt` under the UI Layer section. Any fresh `pip install -r requirements.txt` now installs the correct version and the crash cannot recur.
+
+**Lesson:** Transitive dependencies that satisfy one project's upper bound can silently violate another project's lower bound. Pin every transitive dep that has caused a production crash — don't rely on pip's resolver to catch these across shared environments.
 
 ---
 
