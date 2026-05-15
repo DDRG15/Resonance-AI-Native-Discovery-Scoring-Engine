@@ -15,10 +15,13 @@ Architecture role:
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
 from pydantic import BaseModel, Field, field_validator, model_validator
+
+logger = logging.getLogger(__name__)
 
 
 # =============================================================================
@@ -566,15 +569,24 @@ class ExtractionResult(BaseModel):
         """
         Validates each job entry individually and silently drops any that fail
         (missing/empty title or company). Valid entries are never affected.
+        Emits a WARNING log when jobs are dropped so silent data loss is traceable.
         """
         if not isinstance(data, dict) or "jobs" not in data:
             return data
+        raw_list = data.get("jobs") or []
         valid = []
-        for raw in data.get("jobs") or []:
+        for raw in raw_list:
             try:
                 ExtractedJob.model_validate(raw)
                 valid.append(raw)
             except Exception:
                 pass
+        dropped = len(raw_list) - len(valid)
+        if dropped:
+            logger.warning(
+                "[EXTRACT] %d job(s) dropped by skip_invalid_jobs validator "
+                "(missing/invalid title or company).",
+                dropped,
+            )
         data["jobs"] = valid
         return data
