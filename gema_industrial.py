@@ -3,6 +3,7 @@ gema_industrial.py — GEMA Industrial Multi-Source Scraper
 Scrapes up to 100 jobs from 8 job boards, extracts via NLP, writes multi-tab Excel.
 """
 
+import argparse
 import asyncio
 import gzip
 import json
@@ -29,7 +30,13 @@ sys.path.insert(0, ".")
 from dotenv import load_dotenv
 load_dotenv()
 
-from nlp_engine import extract_jobs_from_text
+from nlp_engine import (
+    extract_jobs_from_text,
+    reset_rate_limit_flags,
+    generate_ephemeral_profile,
+    extract_cv_text,
+    _build_extraction_prompt,
+)
 
 # =============================================================================
 # Constants
@@ -39,6 +46,9 @@ XLSX_PATH  = Path(__file__).parent / "GEMA_JOB_TRACKER.xlsx"
 BATCH_SIZE = 5
 MAX_JOBS   = 100
 TODAY      = date.today().isoformat()
+
+WELLFOUND_WALK_MAX_BREADTH = 200  # max items traversed per level in _walk()
+CIRCUIT_BREAKER_MAX_ERRORS = 3    # consecutive NLP batch failures before aborting a source
 
 COLUMNS = [
     "DATE_FETCHED", "MATCH_SCORE", "JOB_TITLE", "COMPANY",
@@ -151,16 +161,45 @@ def _fmt_tech(job) -> str:
     return ", ".join(job.required_tech) if job.required_tech else "Not specified"
 
 
-def extract_and_build_rows(raw_jobs: list[dict], source_url: str) -> list[dict]:
-    rows = []
-    for batch_start in range(0, len(raw_jobs), BATCH_SIZE):
-        batch = raw_jobs[batch_start: batch_start + BATCH_SIZE]
-        blocks, url_map = [], {}
+def extract_and_build_rows(
+    raw_jobs: list[dict],
+    source_url: str,
+    seen_urls: Optional[set] = None,
+    extraction_prompt: Optional[str] = None,
+) -> list[dict]:
+    """
+    NLP-extracts structured rows from raw scraped job dicts.
 
-        for local_i, rj in enumerate(batch, 1):
-            global_i = batch_start + local_i
+    seen_urls: shared set across sources — mutated in-place for cross-source dedup.
+    extraction_prompt: personalised prompt from generate_ephemeral_profile(); falls
+        back to the generic _EXTRACTION_SYSTEM_PROMPT inside extract_jobs_from_text().
+    Circuit breaker: aborts this source after CIRCUIT_BREAKER_MAX_ERRORS consecutive
+        NLP batch failures to prevent burning API quota on a broken feed.
+    """
+    if seen_urls is None:
+        seen_urls = set()
+    rows = []
+    consecutive_errors = 0
+
+    for batch_start in range(0, len(raw_jobs), BATCH_SIZE):
+        if consecutive_errors >= CIRCUIT_BREAKER_MAX_ERRORS:
+            print(
+                f"  [CIRCUIT BREAKER] {CIRCUIT_BREAKER_MAX_ERRORS} consecutive NLP failures "
+                f"— aborting this source to preserve API quota."
+            )
+            break
+
+        batch = [
+            rj for rj in raw_jobs[batch_start: batch_start + BATCH_SIZE]
+            if rj.get("url", "") not in seen_urls
+        ]
+        if not batch:
+            continue
+
+        blocks = []
+        for local_i, rj in enumerate(batch, batch_start + 1):
             block = build_text_block(
-                global_i,
+                local_i,
                 title=rj.get("title", ""),
                 company=rj.get("company", ""),
                 url=rj.get("url", source_url),
@@ -168,18 +207,27 @@ def extract_and_build_rows(raw_jobs: list[dict], source_url: str) -> list[dict]:
                 salary=rj.get("salary", ""),
                 location=rj.get("location", ""),
             )
-            url_map[global_i] = rj.get("url", source_url)
             blocks.append(block)
 
         combined = "\n\n" + ("\n\n" + "-" * 40 + "\n\n").join(blocks)
         try:
-            result = extract_jobs_from_text(combined, source_url=source_url, log_callback=None)
+            result = extract_jobs_from_text(
+                combined,
+                source_url=source_url,
+                log_callback=None,
+                extraction_prompt=extraction_prompt,
+            )
+            consecutive_errors = 0
         except Exception as e:
             print(f"  [ERROR] NLP batch failed: {e}")
+            consecutive_errors += 1
             continue
 
         for job in result.jobs:
             url = job.source_url or source_url
+            if url in seen_urls:
+                continue
+            seen_urls.add(url)
             rows.append({
                 "DATE_FETCHED":        TODAY,
                 "MATCH_SCORE":         job.cv_match_score,
@@ -604,10 +652,10 @@ async def _playwright_wellfound(max_jobs: int) -> list[dict]:
                                     "location":    obj.get("locationName") or obj.get("location", ""),
                                     "description": html_to_text(desc) if "<" in desc else desc,
                                 })
-                            for v in obj.values():
+                            for v in list(obj.values())[:WELLFOUND_WALK_MAX_BREADTH]:
                                 _walk(v, depth + 1)
                         elif isinstance(obj, list):
-                            for item in obj:
+                            for item in obj[:WELLFOUND_WALK_MAX_BREADTH]:
                                 _walk(item, depth + 1)
 
                     _walk(nd)
@@ -911,8 +959,38 @@ SOURCES = [
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="GEMA Industrial Multi-Source Scraper")
+    parser.add_argument(
+        "--cv",
+        type=str,
+        default=None,
+        metavar="PATH",
+        help="Path to CV file (PDF/DOCX/TXT/MD) — enables profile-aware NLP extraction.",
+    )
+    args = parser.parse_args()
+
+    extraction_prompt: Optional[str] = None
+    if args.cv:
+        cv_path = Path(args.cv)
+        if cv_path.exists():
+            file_bytes  = cv_path.read_bytes()
+            raw_cv_text = extract_cv_text(cv_path.name, file_bytes)
+            profile     = generate_ephemeral_profile(raw_cv_text)
+            extraction_prompt = _build_extraction_prompt(profile)
+            print(
+                f"[GEMA] CV loaded: {cv_path.name} — "
+                f"role={profile.get('role', '?')}, "
+                f"skills={len(profile.get('core_skills', []))}, "
+                f"signals={len(profile.get('audit_signals', []))}"
+            )
+        else:
+            print(f"[WARN] CV file not found: {args.cv} — using generic extraction profile.")
+
+    reset_rate_limit_flags()
+
     total_new  = 0
     sheet_data: dict[str, pd.DataFrame] = {}
+    seen_urls:  set[str] = set()
 
     for source in SOURCES:
         name    = source["name"]
@@ -930,7 +1008,12 @@ if __name__ == "__main__":
             continue
 
         print(f"\n[GEMA] Extracting {len(raw_jobs)} jobs from {name}...")
-        rows = extract_and_build_rows(raw_jobs, src_url)
+        rows = extract_and_build_rows(
+            raw_jobs,
+            src_url,
+            seen_urls=seen_urls,
+            extraction_prompt=extraction_prompt,
+        )
 
         if rows:
             sheet_data[name] = pd.DataFrame(rows, columns=COLUMNS)
