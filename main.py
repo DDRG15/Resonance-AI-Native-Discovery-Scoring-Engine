@@ -138,7 +138,11 @@ for key, default in DEFAULTS.items():
     if key not in st.session_state:
         st.session_state[key] = default
 
-db = GemaDatabase()
+@st.cache_resource
+def _get_db() -> GemaDatabase:
+    return GemaDatabase()
+
+db = _get_db()
 
 @st.cache_resource
 def _get_integrations():

@@ -139,9 +139,15 @@ class GemaDatabase:
             return ""
 
         backup_path = str(src_path) + config.DB_BACKUP_SUFFIX
-        src_conn = sqlite3.connect(self.db_path)
-        dst_conn = sqlite3.connect(backup_path)
+        # timeout=5000ms: waits for the writer task to release its lock rather
+        # than raising OperationalError immediately under concurrent write load.
+        src_conn = sqlite3.connect(self.db_path, timeout=5.0)
+        dst_conn = sqlite3.connect(backup_path, timeout=5.0)
         try:
+            # Mirror the WAL + foreign-keys pragmas from _get_connection() so
+            # the backup connection reads a fully consistent WAL checkpoint.
+            src_conn.execute("PRAGMA journal_mode=WAL")
+            src_conn.execute("PRAGMA foreign_keys=ON")
             src_conn.backup(dst_conn)
             logger.info("WAL-safe backup created: %s", backup_path)
         finally:
