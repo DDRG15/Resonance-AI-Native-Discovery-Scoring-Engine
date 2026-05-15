@@ -7,10 +7,9 @@ SRE: Groq primary + Gemini fallback, exponential backoff, Pydantic validation,
 
 import json
 import logging
-import os
 import re
 import requests
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import ValidationError
 from tenacity import (
@@ -173,6 +172,29 @@ _backoff = retry(
 
 
 # =============================================================================
+# Module-level LLM client singletons
+# =============================================================================
+
+# Single Groq client — reuses the underlying httpx connection pool across all calls.
+_groq_client: Any = None
+
+
+def _get_groq_client() -> Any:
+    global _groq_client
+    if _groq_client is None:
+        from groq import Groq
+        _groq_client = Groq(api_key=config.GROQ_API_KEY)
+    return _groq_client
+
+
+# Configure Gemini once at import time — genai.configure() mutates global SDK state;
+# calling it on every invocation races on the api_key field in multi-threaded contexts.
+if config.GEMINI_API_KEY:
+    import google.generativeai as genai
+    genai.configure(api_key=config.GEMINI_API_KEY)
+
+
+# =============================================================================
 # LLM Callers
 # =============================================================================
 
@@ -181,10 +203,8 @@ def _call_groq(messages: list[dict]) -> str:
     global _groq_rate_limited
     if _groq_rate_limited:
         raise _ProviderRateLimited("Groq rate-limited this session — skipping")
-    from groq import Groq
     try:
-        client = Groq(api_key=config.GROQ_API_KEY)
-        resp = client.chat.completions.create(
+        resp = _get_groq_client().chat.completions.create(
             model=config.GROQ_MODEL,
             messages=messages,
             temperature=0.0,
@@ -207,7 +227,6 @@ def _call_gemini(messages: list[dict]) -> str:
         raise _ProviderRateLimited("Gemini rate-limited this session — skipping")
     import google.generativeai as genai
     try:
-        genai.configure(api_key=config.GEMINI_API_KEY)
         model = genai.GenerativeModel(
             model_name=config.GEMINI_MODEL,
             system_instruction=_SYSTEM_PROMPT,
@@ -236,10 +255,8 @@ def _call_groq_plain(prompt: str) -> str:
     global _groq_rate_limited
     if _groq_rate_limited:
         raise _ProviderRateLimited("Groq rate-limited this session — skipping")
-    from groq import Groq
     try:
-        client = Groq(api_key=config.GROQ_API_KEY)
-        resp = client.chat.completions.create(
+        resp = _get_groq_client().chat.completions.create(
             model=config.GROQ_MODEL,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.2,
@@ -261,7 +278,6 @@ def _call_gemini_plain(prompt: str) -> str:
         raise _ProviderRateLimited("Gemini rate-limited this session — skipping")
     import google.generativeai as genai
     try:
-        genai.configure(api_key=config.GEMINI_API_KEY)
         model = genai.GenerativeModel(model_name=config.GEMINI_MODEL)
         resp = model.generate_content(
             prompt,
@@ -291,7 +307,7 @@ def _call_openrouter(messages: list[dict]) -> str:
         resp = requests.post(
             "https://openrouter.ai/api/v1/chat/completions",
             headers={
-                "Authorization": f"Bearer {os.getenv('OPENROUTER_API_KEY')}",
+                "Authorization": f"Bearer {config.OPENROUTER_API_KEY}",
                 "Content-Type": "application/json",
             },
             json={
@@ -347,7 +363,7 @@ def _call_cohere(messages: list[dict]) -> str:
         resp = requests.post(
             "https://api.cohere.ai/v1/chat",
             headers={
-                "Authorization": f"Bearer {os.getenv('COHERE_API_KEY')}",
+                "Authorization": f"Bearer {config.COHERE_API_KEY}",
                 "Content-Type": "application/json",
             },
             json=payload,
@@ -383,7 +399,7 @@ def _call_openrouter_plain(prompt: str) -> str:
         resp = requests.post(
             "https://openrouter.ai/api/v1/chat/completions",
             headers={
-                "Authorization": f"Bearer {os.getenv('OPENROUTER_API_KEY')}",
+                "Authorization": f"Bearer {config.OPENROUTER_API_KEY}",
                 "Content-Type": "application/json",
             },
             json={
@@ -421,7 +437,7 @@ def _call_cohere_plain(prompt: str) -> str:
         resp = requests.post(
             "https://api.cohere.ai/v1/chat",
             headers={
-                "Authorization": f"Bearer {os.getenv('COHERE_API_KEY')}",
+                "Authorization": f"Bearer {config.COHERE_API_KEY}",
                 "Content-Type": "application/json",
             },
             json={
@@ -692,10 +708,58 @@ def generate_and_audit_config(
 
 import functools
 
+
+def _region_from_location(raw_location: str) -> str:
+    """
+    Maps a city/country location string to a non-identifying timezone region label.
+    Retains only the UTC offset context the LLM needs for location_strictness
+    evaluation — strips city and country entirely.
+    """
+    s = raw_location.lower()
+    if any(k in s for k in ("peru", "lima", "ecuador", "colombia", "panama")):
+        return "LATAM (UTC-5)"
+    if any(k in s for k in ("argentina", "brazil", "brasil", "chile", "uruguay", "paraguay", "bolivia")):
+        return "LATAM (UTC-3)"
+    if any(k in s for k in ("mexico", "mexico city", "monterrey")):
+        return "LATAM (UTC-6)"
+    if any(k in s for k in ("united states", "usa", "new york", "san francisco", "seattle", "chicago")):
+        return "North America"
+    if any(k in s for k in ("united kingdom", "uk", "london")):
+        return "Europe (UTC+0)"
+    if any(k in s for k in ("europe", "germany", "france", "spain", "netherlands", "sweden")):
+        return "Europe (CET)"
+    if any(k in s for k in ("india", "bangalore", "mumbai", "delhi")):
+        return "Asia (IST)"
+    return "Remote"
+
+
+def _sanitize_profile(raw: dict) -> dict:
+    """
+    Strips PII from user_profile.yaml before any LLM injection.
+
+    What is removed:
+      - Exact city + country from 'location' → replaced with timezone region only
+      - Named project identifiers (Vigil-SRE, Micro-Billing-Ledger, Aequitas, etc.)
+        from 'key_projects' → capability descriptions only
+
+    What is retained (non-identifying):
+      - role, core_skills, audit_signals, timezone (as generic UTC offset label)
+    """
+    safe = dict(raw)
+    safe["location"] = _region_from_location(raw.get("location", ""))
+    safe["key_projects"] = [
+        p["description"]
+        for p in raw.get("key_projects", [])
+        if isinstance(p, dict) and p.get("description")
+    ]
+    return safe
+
+
 @functools.lru_cache(maxsize=1)
 def _build_extraction_prompt() -> str:
     """
-    Builds the extraction system prompt with user_profile.yaml injected.
+    Builds the extraction system prompt with a PII-sanitized user_profile.yaml injected.
+    _sanitize_profile() strips city/country and named project identifiers before injection.
     Cached after first call — the YAML doesn't change during a session.
     Falls back to hardcoded defaults if the YAML is missing or unreadable.
     """
@@ -704,27 +768,34 @@ def _build_extraction_prompt() -> str:
     profile_path = Path(__file__).parent / "user_profile.yaml"
     try:
         with open(profile_path, "r", encoding="utf-8") as f:
-            profile = yaml.safe_load(f)
+            raw_profile = yaml.safe_load(f)
     except Exception:
-        profile = {
+        raw_profile = {
             "location": "Lima, Peru",
-            "timezone": "EST / UTC-5",
+            "timezone": "PET / UTC-5",
             "role": "Backend / SRE / Automation / DevOps",
             "core_skills": ["Python", "AWS", "GCP", "Docker", "Automation", "No-Code", "APIs"],
         }
+    profile = _sanitize_profile(raw_profile)
     skills = ", ".join(profile.get("core_skills", []))
-    location = profile.get("location", "Lima, Peru")
-    timezone = profile.get("timezone", "EST / UTC-5")
+    location = profile.get("location", "LATAM (UTC-5)")
+    timezone = profile.get("timezone", "UTC-5")
     role = profile.get("role", "Backend / SRE / Automation / DevOps")
     audit_signals = ", ".join(profile.get("audit_signals", [
         "audit logs", "audit trail", "zero data loss", "ACID compliance",
         "data integrity", "idempotency", "DevSecOps", "security hardening",
         "traceability", "determinism", "SRE", "systems reliability",
     ]))
-    projects = "; ".join(
-        f"{p['name']} ({p['description']})"
-        for p in profile.get("key_projects", [])
-    ) or "Vigil-SRE (infra monitoring); Micro-Billing-Ledger (idempotent ledger); Aequitas (privacy auditing)"
+    # Capability descriptions only — project names stripped by _sanitize_profile()
+    capability_descriptions = profile.get("key_projects", [])
+    projects_line = "; ".join(capability_descriptions) or (
+        "Async infrastructure monitoring with SRE-grade reliability; "
+        "Idempotent ledger with ACID compliance and zero-data-loss; "
+        "Privacy auditing engine with deterministic traceability"
+    )
+    portfolio_summary = "; ".join(capability_descriptions) if capability_descriptions else (
+        "infrastructure reliability, idempotent financial systems, and privacy compliance auditing"
+    )
     return f"""You are a High-Precision Data Extraction Engine and Personalized Job Advisor specializing in Backend Engineering job market analysis. Your goal is to transform messy, unformatted job board text into structured, deterministic JSON data — personalized against a specific user profile.
 
 ════════════════════════════════════════════════════════
@@ -741,7 +812,7 @@ Location  : {location}
 Timezone  : {timezone}
 Role      : {role}
 Skills    : {skills}
-Projects  : {projects}
+Projects  : {projects_line}
 
 ═══ 1. SALARY & CURRENCY ═══
 • Extract only numerical values. "Competitive", "DOE", "Market rate" → null.
@@ -784,7 +855,7 @@ Evaluate from the perspective of the user in {location} ({timezone}):
 location_notes (ALWAYS required — never null):
 • 1-2 sentences specific to someone in {location} ({timezone}).
 • Reference the relevant phrase from the job text.
-• Example: "Requires EST hours only, no US residency mentioned — Lima is UTC-5, a match."
+• Example: "Requires EST hours only, no US residency mentioned — user is UTC-5, a match."
 
 ═══ 6. COMPANY IDENTIFICATION (CRITICAL — never use board name) ═══
 The "company" field MUST be the ACTUAL HIRING company, not the job board.
@@ -811,9 +882,8 @@ AUDIT MENTALITY BONUS — add these bonuses on top of the base score (cap total 
 CRITICAL — 0.8+ RULE: If the job explicitly requires or values ANY of the following,
 the FINAL cv_match_score MUST be at least 0.80 regardless of tech overlap:
   Audit signals: {audit_signals}
-  Reason: This candidate's entire career is built around these disciplines (Vigil-SRE,
-  Micro-Billing-Ledger idempotency, Aequitas privacy auditing). These are not nice-to-haves
-  — they are his core professional identity.
+  Reason: This candidate's portfolio demonstrates these disciplines at production depth:
+  {portfolio_summary}. These are not nice-to-haves — they are core professional identity.
 
 BONUS STACK (apply additively, then cap at 1.0):
 • +0.30 if the job explicitly mentions "zero data loss", "audit-ready", "ACID compliance",
@@ -860,7 +930,7 @@ EXPECTED JSON SCHEMA:
       "remote_region": "GLOBAL",
       "is_hybrid": false,
       "location_strictness": "Match",
-      "location_notes": "Explicitly open to LATAM candidates — Lima is a perfect fit.",
+      "location_notes": "Explicitly open to LATAM candidates — UTC-5 timezone is a perfect fit.",
       "required_tech": ["Python", "FastAPI"],
       "preferred_tech": ["Docker"],
       "experience_min_years": 4,

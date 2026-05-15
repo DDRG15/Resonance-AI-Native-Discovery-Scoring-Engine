@@ -40,8 +40,6 @@ import urllib.request
 from datetime import datetime, timezone
 from typing import Optional
 
-import requests
-
 import config
 from models import TieredJob, ScrapeRunSummary
 
@@ -57,12 +55,15 @@ def send_discord_alert(message: str) -> None:
     if not config.DISCORD_WEBHOOK_URL:
         return
     try:
-        resp = requests.post(
+        data = json.dumps({"content": message}, ensure_ascii=False).encode("utf-8")
+        req = urllib.request.Request(
             config.DISCORD_WEBHOOK_URL,
-            json={"content": message},
-            timeout=5,
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
         )
-        resp.raise_for_status()
+        with urllib.request.urlopen(req, timeout=5):
+            pass
     except Exception as exc:
         logger.warning("Discord alert failed: %s", exc)
 

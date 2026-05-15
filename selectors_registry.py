@@ -657,7 +657,7 @@ def get_selectors(domain: str) -> Optional[DomainSelectors]:
     """
     clean = domain.lower().strip().replace("www.", "").rstrip("/").split("/")[0]
     for key, sel in SELECTORS.items():
-        if key in clean or clean in key:
+        if key in clean:
             return sel
     return None
 

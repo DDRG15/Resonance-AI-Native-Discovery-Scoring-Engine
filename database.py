@@ -234,13 +234,21 @@ class GemaDatabase:
         hash_to_url = {self.compute_hash(u): u for u in urls}
         all_hashes = list(hash_to_url.keys())
 
-        placeholders = ",".join("?" * len(all_hashes))
+        # SQLite SQLITE_MAX_VARIABLE_NUMBER is 999 by default.
+        # Chunking prevents "too many SQL variables" on large batches.
+        _CHUNK = 900
+        rows = []
         with _get_connection(self.db_path) as conn:
-            rows = conn.execute(
-                f"SELECT job_hash, scraped_at FROM seen_jobs_registry "
-                f"WHERE job_hash IN ({placeholders})",
-                all_hashes,
-            ).fetchall()
+            for i in range(0, len(all_hashes), _CHUNK):
+                chunk = all_hashes[i : i + _CHUNK]
+                placeholders = ",".join("?" * len(chunk))
+                rows.extend(
+                    conn.execute(
+                        f"SELECT job_hash, scraped_at FROM seen_jobs_registry "
+                        f"WHERE job_hash IN ({placeholders})",
+                        chunk,
+                    ).fetchall()
+                )
 
         seen_map = {
             row["job_hash"]: datetime.fromisoformat(row["scraped_at"])

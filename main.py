@@ -130,6 +130,9 @@ DEFAULTS = {
     "is_running":          False,
     "run_id":              None,
     "start_webhook_sent":  False,   # guards Stage 1 Discord ping against re-render
+    "scrape_thread":       None,    # threading.Thread | None — persisted to survive re-renders
+    "log_queue":           None,    # queue.Queue | None
+    "result_holder":       None,    # dict | None
 }
 for key, default in DEFAULTS.items():
     if key not in st.session_state:
@@ -417,6 +420,9 @@ if st.session_state.search_config:
             st.session_state.scrape_results      = None
             st.session_state.logs                = []
             st.session_state.start_webhook_sent  = False
+            st.session_state.scrape_thread       = None
+            st.session_state.log_queue           = None
+            st.session_state.result_holder       = None
             _add_log("[GEMA] Extraction confirmed. Starting pipeline...")
             st.rerun()
         except Exception as exc:
@@ -433,51 +439,52 @@ if st.session_state.is_running:
     log_placeholder = st.empty()
     progress_placeholder = st.empty()
 
-    log_queue: queue.Queue = queue.Queue()
-    result_holder: dict = {}
+    # Persist queue and result dict in session state so a Streamlit re-render
+    # (triggered by any UI event while is_running=True) never creates a second
+    # thread or loses messages already buffered in the queue.
+    if st.session_state.log_queue is None:
+        st.session_state.log_queue = queue.Queue()
+    if st.session_state.result_holder is None:
+        st.session_state.result_holder = {}
 
-    def _scraper_thread(search_config):
-        jobs, summary = run_scrape_session(
-            search_config,
-            db,
-            log_queue,
-            ttl_hours,
+    log_queue     = st.session_state.log_queue
+    result_holder = st.session_state.result_holder
+
+    # Only start the scraper thread once per run — guard against re-render
+    # spawning a second concurrent Playwright session while is_running=True.
+    if st.session_state.scrape_thread is None or not st.session_state.scrape_thread.is_alive():
+
+        # Reset LLM rate-limit flags so providers blocked in a previous run are retried
+        reset_rate_limit_flags()
+
+        def _scraper_thread(search_config):
+            jobs, summary = run_scrape_session(
+                search_config,
+                db,
+                log_queue,
+                ttl_hours,
+            )
+            result_holder["jobs"]    = jobs
+            result_holder["summary"] = summary
+
+        st.session_state.scrape_thread = threading.Thread(
+            target=_scraper_thread,
+            args=(st.session_state.search_config,),
+            daemon=True,
         )
-        result_holder["jobs"]    = jobs
-        result_holder["summary"] = summary
+        st.session_state.scrape_thread.start()
 
-    # Reset LLM rate-limit flags so providers blocked in a previous run are retried
-    reset_rate_limit_flags()
+        # Stage 1 — notify Discord that the run has started (fires exactly once per run).
+        # Dispatched in a daemon thread so the blocking HTTP call never stalls the UI.
+        if not st.session_state.get("start_webhook_sent", False):
+            threading.Thread(
+                target=send_discord_alert,
+                args=(random.choice(START_PHRASES),),
+                daemon=True,
+            ).start()
+            st.session_state["start_webhook_sent"] = True
 
-    # Stage 1 — notify Discord that the run has started (fires exactly once per run)
-    if not st.session_state.get("start_webhook_sent", False):
-        send_discord_alert(random.choice(START_PHRASES))
-        st.session_state["start_webhook_sent"] = True
-
-    thread = threading.Thread(
-        target=_scraper_thread,
-        args=(st.session_state.search_config,),
-        daemon=True,
-    )
-    thread.start()
-
-    # ── Non-blocking live log loop (Fix 3) ───────────────────────────────────
-    # WHY NO thread.join() HERE:
-    #   thread.join() blocks the main Streamlit thread completely. While
-    #   blocked, Streamlit's websocket layer cannot send delta updates to
-    #   the browser — the UI is frozen until the entire scrape finishes.
-    #   The user sees a spinner but receives no log lines until the end.
-    #
-    # CORRECT PATTERN:
-    #   while thread.is_alive() checks thread state without blocking.
-    #   log_queue.get_nowait() is non-blocking — raises queue.Empty instantly
-    #   if no message is ready, rather than waiting up to 0.3s per call.
-    #   time.sleep(0.5) yields control back to Streamlit's event loop every
-    #   500ms, allowing it to flush pending websocket frames to the browser.
-    #   This produces genuine real-time log streaming to the UI.
-    #
-    #   The final drain loop after is_alive() == False ensures no messages
-    #   written in the thread's last moments are missed.
+    thread = st.session_state.scrape_thread
 
     while thread.is_alive():
         drained = False
@@ -521,7 +528,8 @@ if st.session_state.is_running:
         f"T1={len(tier1)} | T2={len(tier2)} | T3={len(tier3)}"
     )
 
-    # Stage 2 — send extraction report to Discord
+    # Stage 2 + 3 — Discord notifications fired in daemon threads so the 5-second
+    # urllib timeout never blocks the Streamlit render thread or delays st.rerun().
     _discord_report = (
         f"📊 Extraction Report:\n"
         f"- Tier 1: {len(tier1)}\n"
@@ -529,10 +537,8 @@ if st.session_state.is_running:
         f"- Tier 3: {len(tier3)}\n"
         f"- Tier 4: {len(tier4)}"
     )
-    send_discord_alert(_discord_report)
-
-    # Stage 3 — send shutdown phrase to Discord
-    send_discord_alert(random.choice(END_PHRASES))
+    threading.Thread(target=send_discord_alert, args=(_discord_report,), daemon=True).start()
+    threading.Thread(target=send_discord_alert, args=(random.choice(END_PHRASES),), daemon=True).start()
 
     # Push to integrations
     all_results = tier1 + tier2 + tier3 + tier4
