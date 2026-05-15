@@ -43,3 +43,6 @@ openpyxl==3.1.5        # .xlsx writer engine used by pandas.to_excel()
 
 # ── Utilities ────────────────────────────────────────────────────────────────
 tenacity==8.3.0        # Exponential backoff for all external API calls
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+pytest==8.2.2          # Test runner — LLM callers are mocked; no real API calls made
