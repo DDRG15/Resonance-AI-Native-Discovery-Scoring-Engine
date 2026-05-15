@@ -29,7 +29,14 @@ from integrations import NotionClient, SheetsClient
 from integrations.webhook_client import send_discord_alert
 from matcher import bucket_jobs
 from models import SearchConfig, SearchVaultEntry, ScrapeRunSummary
-from nlp_engine import parse_prompt_to_config, generate_and_audit_config, reset_rate_limit_flags
+from nlp_engine import (
+    parse_prompt_to_config,
+    generate_and_audit_config,
+    reset_rate_limit_flags,
+    extract_cv_text,
+    generate_ephemeral_profile,
+    _build_extraction_prompt,
+)
 from scraper import run_scrape_session
 import selectors_registry
 
@@ -133,6 +140,10 @@ DEFAULTS = {
     "scrape_thread":       None,    # threading.Thread | None — persisted to survive re-renders
     "log_queue":           None,    # queue.Queue | None
     "result_holder":       None,    # dict | None
+    "dynamic_profile":     None,    # dict | None — ephemeral CV profile parsed this session
+    "cv_file_hash":        None,    # str | None — SHA-256 of uploaded bytes; re-parse guard
+    "extraction_prompt":   None,    # str | None — built from dynamic_profile
+    "cv_upload":           None,    # file uploader widget state
 }
 for key, default in DEFAULTS.items():
     if key not in st.session_state:
@@ -182,6 +193,46 @@ with st.sidebar:
             st.warning(w)
     else:
         st.success("All systems nominal", icon="✅")
+
+    st.divider()
+
+    # ── Your Profile (Ephemeral CV Upload) ───────────────────────────────────
+    st.subheader("Your Profile")
+    cv_file = st.file_uploader(
+        "Upload CV (PDF / DOCX / TXT / MD)",
+        type=["pdf", "docx", "txt", "md"],
+        key="cv_upload",
+        help="Used once to personalise match scores. Nothing is stored beyond this session.",
+    )
+
+    if cv_file is not None:
+        import hashlib
+        file_bytes  = cv_file.read()
+        file_hash   = hashlib.sha256(file_bytes).hexdigest()
+
+        if file_hash != st.session_state.cv_file_hash:
+            with st.spinner("Parsing CV with Gemini..."):
+                raw_text = extract_cv_text(cv_file.name, file_bytes)
+                profile  = generate_ephemeral_profile(raw_text)
+                st.session_state.dynamic_profile  = profile
+                st.session_state.cv_file_hash     = file_hash
+                st.session_state.extraction_prompt = _build_extraction_prompt(profile)
+
+        profile = st.session_state.dynamic_profile
+        if profile:
+            st.info(
+                f"**Profile active**  \n"
+                f"Role: {profile.get('role', '?')}  \n"
+                f"Skills: {len(profile.get('core_skills', []))}  \n"
+                f"Audit signals: {len(profile.get('audit_signals', []))}  \n"
+                f"Region: {profile.get('location', '?')}"
+            )
+    else:
+        if st.session_state.cv_file_hash is not None:
+            st.session_state.dynamic_profile   = None
+            st.session_state.cv_file_hash      = None
+            st.session_state.extraction_prompt = None
+        st.caption("No CV uploaded — match scores will be generic.")
 
     st.divider()
 
@@ -461,19 +512,20 @@ if st.session_state.is_running:
         # Reset LLM rate-limit flags so providers blocked in a previous run are retried
         reset_rate_limit_flags()
 
-        def _scraper_thread(search_config):
+        def _scraper_thread(search_config, profile):
             jobs, summary = run_scrape_session(
                 search_config,
                 db,
                 log_queue,
                 ttl_hours,
+                profile=profile,
             )
             result_holder["jobs"]    = jobs
             result_holder["summary"] = summary
 
         st.session_state.scrape_thread = threading.Thread(
             target=_scraper_thread,
-            args=(st.session_state.search_config,),
+            args=(st.session_state.search_config, st.session_state.dynamic_profile),
             daemon=True,
         )
         st.session_state.scrape_thread.start()
@@ -517,7 +569,12 @@ if st.session_state.is_running:
     summary  = result_holder.get("summary", ScrapeRunSummary())
 
     _add_log(f"[MATCHER] Scoring {len(raw_jobs)} new jobs...")
-    tier1, tier2, tier3, tier4 = bucket_jobs(raw_jobs, st.session_state.search_config, db)
+    tier1, tier2, tier3, tier4 = bucket_jobs(
+        raw_jobs,
+        st.session_state.search_config,
+        db,
+        profile=st.session_state.dynamic_profile,
+    )
 
     summary.tier1_count = len(tier1)
     summary.tier2_count = len(tier2)

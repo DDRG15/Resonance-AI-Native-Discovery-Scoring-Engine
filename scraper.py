@@ -251,12 +251,14 @@ class GemaScraper:
         log_queue:     queue.Queue,
         ttl_hours:     int           = 0,
         webhook:       Optional[WebhookClient] = None,
+        profile:       Optional[dict] = None,
     ) -> None:
         self.config    = search_config
         self.db        = db
         self.log_queue = log_queue
         self.ttl_hours = ttl_hours
         self.webhook   = webhook or WebhookClient()
+        self.profile   = profile  # ephemeral CV profile; passed to bucket_jobs post-scrape
         self.circuit   = CircuitBreaker()
         self.summary   = ScrapeRunSummary()
 
@@ -799,6 +801,7 @@ def run_scrape_session(
     log_queue:     queue.Queue,
     ttl_hours:     int           = 0,
     webhook:       Optional[WebhookClient] = None,
+    profile:       Optional[dict] = None,
 ) -> tuple[list[JobResult], ScrapeRunSummary]:
     """
     Synchronous entry point called from main.py's daemon thread.
@@ -822,5 +825,5 @@ def run_scrape_session(
     if webhook is None:
         webhook = WebhookClient()
 
-    scraper = GemaScraper(search_config, db, log_queue, ttl_hours, webhook)
+    scraper = GemaScraper(search_config, db, log_queue, ttl_hours, webhook, profile)
     return asyncio.run(scraper.run())

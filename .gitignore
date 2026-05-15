@@ -57,8 +57,7 @@ desktop.ini
 # Claude Code
 .claude/
 
-# Personal data — CV, user profile, and LLM system prompt, never public
-user_profile.yaml
+# Personal data — LLM system prompt, never public
 gema_instructions.md
 
 # Misc

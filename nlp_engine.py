@@ -706,9 +706,6 @@ def generate_and_audit_config(
 # Job Description Extraction Prompt — Personalized Advisor Edition
 # =============================================================================
 
-import functools
-
-
 def _region_from_location(raw_location: str) -> str:
     """
     Maps a city/country location string to a non-identifying timezone region label.
@@ -755,28 +752,106 @@ def _sanitize_profile(raw: dict) -> dict:
     return safe
 
 
-@functools.lru_cache(maxsize=1)
-def _build_extraction_prompt() -> str:
+# Generic fallback used when no CV is uploaded or Groq parse fails.
+# No skills, no projects, no audit signals — personalization is disabled.
+_GENERIC_FALLBACK_PROFILE: dict = {
+    "location": "Remote",
+    "timezone": "UTC",
+    "role": "Software Engineer",
+    "core_skills": [],
+    "key_projects": [],
+    "audit_signals": [],
+}
+
+
+def extract_cv_text(filename: str, file_bytes: bytes) -> str:
     """
-    Builds the extraction system prompt with a PII-sanitized user_profile.yaml injected.
-    _sanitize_profile() strips city/country and named project identifiers before injection.
-    Cached after first call — the YAML doesn't change during a session.
-    Falls back to hardcoded defaults if the YAML is missing or unreadable.
+    Extracts plain text from an uploaded CV file (PDF, DOCX, TXT, or MD).
+    Lazy-imports heavy libraries so they do not load at module startup.
+    Truncates output to 8 000 chars — sufficient for any real CV and
+    stays safely below the LLM token limit for the parse call.
     """
-    import yaml
-    from pathlib import Path
-    profile_path = Path(__file__).parent / "user_profile.yaml"
+    ext = filename.rsplit(".", 1)[-1].lower()
     try:
-        with open(profile_path, "r", encoding="utf-8") as f:
-            raw_profile = yaml.safe_load(f)
-    except Exception:
-        raw_profile = {
-            "location": "Lima, Peru",
-            "timezone": "PET / UTC-5",
-            "role": "Backend / SRE / Automation / DevOps",
-            "core_skills": ["Python", "AWS", "GCP", "Docker", "Automation", "No-Code", "APIs"],
-        }
-    profile = _sanitize_profile(raw_profile)
+        if ext == "pdf":
+            import io
+            import pdfplumber
+            with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+                text = "\n".join(page.extract_text() or "" for page in pdf.pages)
+        elif ext == "docx":
+            import io
+            import docx
+            doc = docx.Document(io.BytesIO(file_bytes))
+            text = "\n".join(p.text for p in doc.paragraphs)
+        else:  # txt, md, or any unknown extension — attempt UTF-8 decode
+            text = file_bytes.decode("utf-8", errors="replace")
+    except Exception as exc:
+        logger.warning("[CV] Text extraction failed for %r: %s", filename, exc)
+        return ""
+    return text[:8_000]
+
+
+def generate_ephemeral_profile(raw_cv_text: str) -> dict:
+    """
+    Parses raw CV text into a sanitized profile dict using Gemini Flash.
+    Gemini is used here (not Groq) to preserve Groq RPM budget for extraction.
+
+    Instructs the LLM to output a JSON object with the same keys as
+    _GENERIC_FALLBACK_PROFILE. The result is always passed through
+    _sanitize_profile() before return — double-guarantee no PII leaks.
+
+    Falls back to _GENERIC_FALLBACK_PROFILE.copy() on any failure
+    (key not configured, rate limit, bad JSON, empty input) — never raises.
+    """
+    if not raw_cv_text or not raw_cv_text.strip():
+        logger.warning("[CV] Empty CV text — returning generic fallback profile.")
+        return _GENERIC_FALLBACK_PROFILE.copy()
+
+    parse_prompt = f"""You are a CV parser. Extract structured data from the CV below.
+Return ONLY a JSON object matching this exact schema — no prose, no markdown:
+
+{{
+  "location": "timezone region label only — e.g. 'LATAM (UTC-5)', 'North America', 'Europe (CET)'. NEVER include city or country name.",
+  "timezone": "UTC offset only — e.g. 'UTC-5'",
+  "role": "primary professional role title — e.g. 'Backend Engineer | SRE'",
+  "core_skills": ["list", "of", "every", "named", "technology", "tool", "framework", "certification"],
+  "key_projects": ["one-sentence capability description per project — DO NOT include project names"],
+  "audit_signals": ["technical domain keywords central to this person's expertise — e.g. 'idempotency', 'SRE', 'ACID compliance'"]
+}}
+
+Rules:
+- location: derive from any address/city in the CV, but output ONLY the timezone region label.
+- core_skills: every named technology, tool, framework, language, certification.
+- key_projects: one sentence per project describing the capability demonstrated. Omit the project name entirely.
+- audit_signals: domain concepts that define the candidate's professional identity.
+- If a field cannot be determined, use an empty list or reasonable default string.
+
+CV TEXT:
+{raw_cv_text}"""
+
+    try:
+        import google.generativeai as genai
+        model = genai.GenerativeModel(model_name=config.GEMINI_MODEL)
+        resp = model.generate_content(
+            parse_prompt,
+            generation_config=genai.GenerationConfig(
+                temperature=0.0,
+                response_mime_type="application/json",
+            ),
+        )
+        parsed = json.loads(resp.text.strip())
+        return _sanitize_profile(parsed)
+    except Exception as exc:
+        logger.warning("[CV] generate_ephemeral_profile failed: %s — using generic fallback.", exc)
+        return _GENERIC_FALLBACK_PROFILE.copy()
+
+
+def _build_extraction_prompt(profile: dict) -> str:
+    """
+    Pure function — builds the LLM extraction system prompt from a pre-sanitized
+    profile dict. The caller is responsible for sanitizing via _sanitize_profile()
+    before passing in. No file I/O, no caching — caller controls reuse.
+    """
     skills = ", ".join(profile.get("core_skills", []))
     location = profile.get("location", "LATAM (UTC-5)")
     timezone = profile.get("timezone", "UTC-5")
@@ -943,7 +1018,7 @@ EXPECTED JSON SCHEMA:
 }}"""
 
 
-_EXTRACTION_SYSTEM_PROMPT = _build_extraction_prompt()
+_EXTRACTION_SYSTEM_PROMPT = _build_extraction_prompt(_GENERIC_FALLBACK_PROFILE)
 
 
 _EXTRACTION_RETRY_INJECT = """Your previous extraction response failed validation:
@@ -962,6 +1037,7 @@ def extract_jobs_from_text(
     raw_text: str,
     source_url: Optional[str] = None,
     log_callback=None,
+    extraction_prompt: Optional[str] = None,
 ) -> ExtractionResult:
     """
     Converts raw job posting text into a validated list of ExtractedJob objects.
@@ -1011,7 +1087,7 @@ def extract_jobs_from_text(
         _log(f"[EXTRACT] Calling {llm_name}...")
 
         messages = [
-            {"role": "system", "content": _EXTRACTION_SYSTEM_PROMPT},
+            {"role": "system", "content": extraction_prompt or _EXTRACTION_SYSTEM_PROMPT},
             {"role": "user",   "content": user_message},
         ]
         raw_response = ""

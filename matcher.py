@@ -120,6 +120,44 @@ def _score_must_include(
     return score, match_reasons, miss_reasons
 
 
+def _score_skill_overlap(
+    job: JobResult,
+    profile: Optional[dict],
+) -> tuple[int, list[str], list[str]]:
+    """
+    Profile skill-overlap bonus. Max 15 points (additive on top of the base 100).
+
+    Searches job title + company + salary_raw for any string in the union of
+    profile['core_skills'] and profile['audit_signals']. Score is proportional
+    to the fraction of signals that hit, capped at 15.
+
+    Returns (0, [...], []) when profile is None or contains no signals — never
+    raises, never penalises a job for a missing profile.
+    """
+    if not profile:
+        return 0, ["No profile loaded — skill overlap skipped"], []
+
+    core_skills   = profile.get("core_skills",   [])
+    audit_signals = profile.get("audit_signals", [])
+    all_signals   = core_skills + audit_signals
+
+    if not all_signals:
+        return 0, ["Profile has no skills or signals — overlap skipped"], []
+
+    searchable = " ".join(filter(None, [
+        job.title, job.company, job.salary_raw or ""
+    ])).lower()
+
+    hits   = [s for s in all_signals if s.lower() in searchable]
+    misses = [s for s in all_signals if s.lower() not in searchable]
+
+    score = min(15, int(15 * len(hits) / len(all_signals)))
+    match_reasons = [f"Skill/signal match: '{s}'" for s in hits]
+    miss_reasons  = [f"Skill/signal absent: '{s}'" for s in misses[:3]]  # cap noise
+
+    return score, match_reasons, miss_reasons
+
+
 def _apply_exclusion_penalty(
     job: JobResult,
     must_exclude: list[str],
@@ -161,7 +199,7 @@ def _assign_tier(score: int) -> str:
 # Public Interface
 # =============================================================================
 
-def score_job(job: JobResult, search_config: SearchConfig) -> TieredJob:
+def score_job(job: JobResult, search_config: SearchConfig, profile: Optional[dict] = None) -> TieredJob:
     """
     Scores a single JobResult and returns a TieredJob with full audit trail.
 
@@ -217,12 +255,15 @@ def score_job(job: JobResult, search_config: SearchConfig) -> TieredJob:
     salary_score,  sm, sn  = _score_salary(job, search_config.min_salary)
     include_score, im, in_ = _score_must_include(job, search_config.must_include)
     excl_delta,    em, en  = _apply_exclusion_penalty(job, search_config.must_exclude)
+    skill_score,   km, kn  = _score_skill_overlap(job, profile)
 
-    all_match.extend(tm + sm + im + em)
-    all_miss.extend(tn + sn + in_ + en)
+    all_match.extend(tm + sm + im + em + km)
+    all_miss.extend(tn + sn + in_ + en + kn)
 
-    raw_score   = title_score + salary_score + include_score + excl_delta
-    final_score = max(0, min(100, raw_score))
+    raw_score   = title_score + salary_score + include_score + excl_delta + skill_score
+    # Cap at 115: the 15-pt skill bonus can push a strong Tier 2 into Tier 1
+    # without disturbing the existing Tier 1 threshold (80 pts).
+    final_score = max(0, min(115, raw_score))
     tier        = _assign_tier(final_score)
 
     logger.debug(
@@ -261,6 +302,7 @@ def bucket_jobs(
     jobs: list[JobResult],
     search_config: SearchConfig,
     db=None,
+    profile: Optional[dict] = None,
 ) -> tuple[list[TieredJob], list[TieredJob], list[TieredJob], list[TieredJob]]:
     """
     Scores and buckets all jobs into four tiers. Returns (t1, t2, t3, t4).
@@ -278,7 +320,7 @@ def bucket_jobs(
     tier1, tier2, tier3, tier4 = [], [], [], []
 
     for job in jobs:
-        tiered = score_job(job, search_config)
+        tiered = score_job(job, search_config, profile=profile)
         if tiered.tier == "Tier 1":
             tier1.append(tiered)
         elif tiered.tier == "Tier 2":
