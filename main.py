@@ -38,6 +38,7 @@ from nlp_engine import (
     _build_extraction_prompt,
 )
 from scraper import run_scrape_session
+from scheduler_service import SchedulerService
 import selectors_registry
 
 # =============================================================================
@@ -161,6 +162,12 @@ def _get_integrations():
 
 notion, sheets = _get_integrations()
 
+@st.cache_resource
+def _get_scheduler() -> SchedulerService:
+    return SchedulerService()
+
+sched_svc = _get_scheduler()
+
 # =============================================================================
 # Helpers
 # =============================================================================
@@ -276,6 +283,56 @@ with st.sidebar:
         min_value=0, max_value=168, value=config.DEFAULT_TTL_HOURS, step=1,
         help="0 = never re-process. 24 = re-process jobs older than 1 day.",
     )
+
+    st.divider()
+
+    # ── Auto-Scheduler ────────────────────────────────────────────────────────
+    st.subheader("Auto-Scheduler")
+    has_config = st.session_state.search_config is not None
+
+    sched_enabled = st.toggle(
+        "Enable automatic scraping",
+        value=sched_svc.enabled,
+        disabled=not has_config,
+        help="Requires a confirmed SearchConfig. Parse and confirm a search first.",
+    )
+    sched_interval = st.radio(
+        "Interval",
+        options=[2, 4, 8, 12, 24],
+        index=[2, 4, 8, 12, 24].index(sched_svc.interval_hours)
+              if sched_svc.interval_hours in [2, 4, 8, 12, 24] else 1,
+        format_func=lambda x: f"{x}h",
+        horizontal=True,
+        disabled=not has_config,
+    )
+
+    if sched_enabled and not sched_svc.enabled and has_config:
+        sched_svc.enable(
+            sched_interval,
+            st.session_state.search_config,
+            st.session_state.dynamic_profile,
+            db,
+        )
+    elif not sched_enabled and sched_svc.enabled:
+        sched_svc.disable()
+    elif sched_enabled and sched_svc.enabled and sched_interval != sched_svc.interval_hours:
+        # Interval changed while running — restart with new interval
+        sched_svc.enable(
+            sched_interval,
+            st.session_state.search_config,
+            st.session_state.dynamic_profile,
+            db,
+        )
+
+    if sched_svc.enabled:
+        st.success(f"● Active — next run: {sched_svc.get_next_run_time()}")
+        st.caption(f"Last: {sched_svc.get_last_run_summary()}")
+        if sched_svc.is_running:
+            st.info("⏳ Scheduled run in progress...")
+    elif has_config:
+        st.caption("○ Paused")
+    else:
+        st.caption("Confirm a search config to enable.")
 
     st.divider()
 
@@ -478,6 +535,8 @@ if st.session_state.search_config:
             st.session_state.scrape_thread       = None
             st.session_state.log_queue           = None
             st.session_state.result_holder       = None
+            # Keep scheduler's stored config in sync with the newly confirmed one
+            sched_svc.update_config(final_config, st.session_state.dynamic_profile)
             _add_log("[GEMA] Extraction confirmed. Starting pipeline...")
             st.rerun()
         except Exception as exc:
