@@ -232,9 +232,11 @@ class TieredJob(BaseModel):
     match_score: int = Field(
         ...,
         ge=-1,
-        le=100,
+        le=115,
         description=(
-            "0–100 match percentage for scored tiers (Tier 1/2/3). "
+            "0–115 match score for scored tiers (Tier 1/2/3). "
+            "Base is 0–100; the +15 skill-overlap bonus (when CV is loaded) "
+            "can push a strong Tier 2 into Tier 1 without changing the 80-pt threshold. "
             "-1 is the sentinel value for Tier 4 (Manual Review) jobs "
             "that bypass mathematical scoring entirely."
         ),

@@ -60,6 +60,11 @@ desktop.ini
 # Personal data — LLM system prompt, never public
 gema_instructions.md
 
+# Archives — may contain .env with live credentials
+*.zip
+*.tar.gz
+*.rar
+
 # Misc
 *.xlsx
 *.csv
