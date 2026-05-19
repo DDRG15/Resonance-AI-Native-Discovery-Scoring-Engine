@@ -36,6 +36,10 @@ credentials/*.p12
 *.json
 !requirements*.json
 
+# Session cookies — gitkeep the directory, ignore the actual cookie files
+cookies/*.json
+!cookies/README.md
+
 # Logs
 *.log
 logs/
