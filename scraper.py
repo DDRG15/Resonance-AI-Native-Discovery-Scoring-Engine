@@ -373,7 +373,31 @@ class GemaScraper:
         self._log(f"[GEMA] Blitz run {self.summary.run_id[:8]} starting.")
         self.db.backup()
 
-        domains = self.config.target_domains or ["himalayas.app", "trueup.io"]
+        all_domains = self.config.target_domains or ["himalayas.app", "trueup.io"]
+
+        # Pre-scrape board probe — classify protection type, skip hard-blocked domains
+        # Runs only if board_probe is importable (graceful degradation if missing deps)
+        domains = all_domains
+        try:
+            from board_probe import probe_all_boards, OPEN, RATE_LIMITED, LOGIN_WALL
+            self._log("[PROBE] Running pre-scrape board reconnaissance...")
+            probe_results = await probe_all_boards(domains=all_domains, concurrency=3)
+            scrapeable, skipped = [], []
+            for pr in probe_results:
+                if pr.can_scrape_now or pr.protection_type == LOGIN_WALL:
+                    # LOGIN_WALL domains are attempted — CookieVault may have cookies
+                    scrapeable.append(pr.domain)
+                else:
+                    skipped.append(f"{pr.domain}({pr.protection_type})")
+            domains = scrapeable
+            if skipped:
+                self._log(f"[PROBE] Skipped hard-blocked: {', '.join(skipped)}")
+            self._log(
+                f"[PROBE] Proceeding with {len(domains)}/{len(all_domains)} domains."
+            )
+        except Exception as probe_exc:
+            self._log(f"[PROBE] Skipped (error: {probe_exc}). Proceeding with all domains.")
+            domains = all_domains
 
         async with async_playwright() as pw:
             browser: Browser = await pw.chromium.launch(

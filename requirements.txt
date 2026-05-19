@@ -47,3 +47,4 @@ tenacity==8.3.0        # Exponential backoff for all external API calls
 
 # ── Testing ───────────────────────────────────────────────────────────────────
 pytest==8.2.2          # Test runner — LLM callers are mocked; no real API calls made
+pytest-asyncio==0.23.8 # async def test support (required for cookie_vault async tests)
