@@ -67,6 +67,7 @@ from playwright_stealth import Stealth
 import config
 from selectors_registry import DomainSelectors, get_selectors
 from database import GemaDatabase
+from integrations.cookie_vault import CookieVault
 from integrations.webhook_client import WebhookClient
 from matcher import score_job
 from models import JobResult, SearchConfig, ScrapeRunSummary, TieredJob
@@ -408,6 +409,16 @@ class GemaScraper:
             ]
             for pattern in _BLOCKED:
                 await context.route(pattern, lambda r, _p=pattern: r.abort())
+
+            # Inject session cookies for login-gated domains (wellfound, arc.dev, etc.)
+            # CookieVault loads from cookies/<domain>.json — silently skips if file absent
+            vault = CookieVault()
+            for domain in domains:
+                injected = await vault.inject_into_context(domain, context)
+                if injected:
+                    self._log(
+                        f"[VAULT] Injected {injected} session cookies for {domain}"
+                    )
 
             try:
                 # Start the DB writer task — runs for the entire scrape session
