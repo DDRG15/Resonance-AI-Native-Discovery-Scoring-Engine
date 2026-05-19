@@ -483,6 +483,27 @@ class GemaScraper:
                         )
                         self.summary.errors.append(str(result))
 
+                # camoufox — remoteok.com uses Firefox to bypass Cloudflare Bot Fight Mode.
+                # Runs after the Playwright gather while the DB writer task is still alive,
+                # so camoufox results flow through the same dedup + write pipeline.
+                if "remoteok.com" in domains:
+                    try:
+                        from camoufox_scraper import scrape_remoteok
+                        self._log("[CAMOUFOX] Launching Firefox scraper for remoteok.com...")
+                        camoufox_jobs = await scrape_remoteok(
+                            self.config.target_titles, self.config
+                        )
+                        ingested = await self._ingest_external_jobs(
+                            camoufox_jobs, "remoteok.com"
+                        )
+                        self._log(
+                            f"[CAMOUFOX] remoteok.com: {len(camoufox_jobs)} scraped, "
+                            f"{ingested} new ingested."
+                        )
+                    except Exception as cf_exc:
+                        self._log(f"[CAMOUFOX] Skipped (error: {cf_exc}).")
+                        self.summary.errors.append(f"camoufox: {cf_exc}")
+
                 # Signal writer to flush and stop
                 await self._write_q.put(None)
                 await writer_task
@@ -506,6 +527,51 @@ class GemaScraper:
             f"Errors={len(self.summary.errors)}"
         )
         return self._all_jobs, self.summary
+
+    # =========================================================================
+    # External Job Ingestion — dedup + write-queue bridge for non-Playwright sources
+    # =========================================================================
+
+    async def _ingest_external_jobs(
+        self,
+        jobs: list[JobResult],
+        source_domain: str,
+    ) -> int:
+        """
+        Run externally-produced JobResults (e.g. camoufox) through the same
+        dedup + DB-write + webhook pipeline used by _extract_all_cards.
+
+        Called while the _db_writer_task is still running (before the sentinel).
+        Returns the count of new jobs enqueued.
+        """
+        loop = asyncio.get_running_loop()
+        ingested = 0
+        for job in jobs:
+            url_hash = GemaDatabase.compute_hash(job.url)
+            if self._seen_this_session(url_hash):
+                self.summary.skipped_seen += 1
+                continue
+            try:
+                is_seen, reason = await loop.run_in_executor(
+                    None, self.db.is_seen, job.url, self.ttl_hours
+                )
+            except Exception as exc:
+                logger.warning("[DB READ] is_seen failed for %s: %s", job.url, exc)
+                is_seen = False
+            if is_seen:
+                self.summary.skipped_seen += 1
+                continue
+            await self._write_q.put(job)
+            ingested += 1
+            self.summary.total_urls_found += 1
+            if self.webhook.is_enabled:
+                try:
+                    tiered = score_job(job, self.config)
+                    if tiered.tier == "Tier 1":
+                        await self.webhook.notify_tier1(tiered)
+                except Exception as exc:
+                    logger.debug("[WEBHOOK SCORE] camoufox inline scoring error: %s", exc)
+        return ingested
 
     # =========================================================================
     # SRP Scraper — one tab per (domain × title) pair
