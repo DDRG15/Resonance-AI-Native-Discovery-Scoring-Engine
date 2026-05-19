@@ -1,48 +1,36 @@
 """
 tests/test_config.py — pytest suite for config.validate_config().
 
-Uses importlib.reload() to re-evaluate module-level os.getenv() calls after
-monkeypatching environment variables. This is necessary because config.py
-binds variables at import time.
+Strategy: monkeypatch.setattr() patches the module-level variables that
+validate_config() reads directly (GROQ_API_KEY, JITTER_MIN, etc.) without
+reloading config. This avoids fighting load_dotenv's override=True behavior.
 
 Coverage:
     1. No LLM key of any kind → warning about missing keys
-    2. PRIMARY_LLM=groq but GROQ_API_KEY absent → fallback warning
+    2. PRIMARY_LLM=groq but GROQ_API_KEY empty → fallback warning
     3. JITTER_MIN >= JITTER_MAX → configuration warning
-    4. All critical values set → empty warnings list
+    4. JITTER_MIN == JITTER_MAX → configuration warning
+    5. All critical values set → no LLM or jitter critical warnings
 """
 
-import importlib
-import os
-
 import pytest
+import config
 
 
-def _reload_config(monkeypatch, overrides: dict) -> object:
-    """
-    Apply env var overrides and reload config so module-level bindings
-    (GROQ_API_KEY = os.getenv(...)) pick up the new values.
-    """
-    # Set every override
-    for key, value in overrides.items():
-        monkeypatch.setenv(key, value)
-
-    # Unset any key not in overrides that could bleed from the real .env
-    keys_to_clear = [
-        "GROQ_API_KEY", "GEMINI_API_KEY", "OPENROUTER_API_KEY", "COHERE_API_KEY",
-        "DISCORD_WEBHOOK_URL", "SLACK_WEBHOOK_URL",
-        "NOTION_API_KEY", "NOTION_DATABASE_ID",
-        "GOOGLE_SHEET_ID", "GOOGLE_CREDENTIALS_PATH",
-        "JITTER_MIN_SECONDS", "JITTER_MAX_SECONDS",
-        "PRIMARY_LLM",
-    ]
-    for key in keys_to_clear:
-        if key not in overrides:
-            monkeypatch.delenv(key, raising=False)
-
-    import config
-    importlib.reload(config)
-    return config
+def _patch_defaults(monkeypatch) -> None:
+    """Set the module attributes to a clean baseline before each test."""
+    monkeypatch.setattr(config, "GROQ_API_KEY", "")
+    monkeypatch.setattr(config, "GEMINI_API_KEY", "")
+    monkeypatch.setattr(config, "OPENROUTER_API_KEY", "")
+    monkeypatch.setattr(config, "COHERE_API_KEY", "")
+    monkeypatch.setattr(config, "PRIMARY_LLM", "groq")
+    monkeypatch.setattr(config, "DISCORD_WEBHOOK_URL", "")
+    monkeypatch.setattr(config, "SLACK_WEBHOOK_URL", "")
+    monkeypatch.setattr(config, "NOTION_API_KEY", "")
+    monkeypatch.setattr(config, "NOTION_DATABASE_ID", "")
+    monkeypatch.setattr(config, "GOOGLE_SHEET_ID", "")
+    monkeypatch.setattr(config, "JITTER_MIN", 5.0)
+    monkeypatch.setattr(config, "JITTER_MAX", 15.0)
 
 
 # =============================================================================
@@ -50,67 +38,76 @@ def _reload_config(monkeypatch, overrides: dict) -> object:
 # =============================================================================
 
 def test_validate_config_warns_when_no_llm_keys(monkeypatch):
-    cfg = _reload_config(monkeypatch, {
-        "JITTER_MIN_SECONDS": "5",
-        "JITTER_MAX_SECONDS": "15",
-    })
-    warnings = cfg.validate_config()
-    assert any("llm api key" in w.lower() or "groq_api_key" in w.lower() for w in warnings)
+    _patch_defaults(monkeypatch)
+    # All LLM keys remain empty (set by _patch_defaults)
+    warnings = config.validate_config()
+    assert any(
+        "no llm api key" in w.lower() or "groq_api_key" in w.lower()
+        for w in warnings
+    ), f"Expected LLM key warning, got: {warnings}"
 
 
 # =============================================================================
-# Test 2 — PRIMARY_LLM=groq but GROQ_API_KEY empty
+# Test 2 — PRIMARY_LLM=groq but GROQ_API_KEY absent
 # =============================================================================
 
 def test_validate_config_warns_groq_primary_without_key(monkeypatch):
-    cfg = _reload_config(monkeypatch, {
-        "PRIMARY_LLM": "groq",
-        "GEMINI_API_KEY": "fake-gemini-key",
-        "JITTER_MIN_SECONDS": "5",
-        "JITTER_MAX_SECONDS": "15",
-    })
-    warnings = cfg.validate_config()
-    assert any("groq" in w.lower() and ("fallback" in w.lower() or "empty" in w.lower()) for w in warnings)
+    _patch_defaults(monkeypatch)
+    # Provide a Gemini key so the "no LLM at all" warning doesn't fire,
+    # but leave GROQ_API_KEY empty with PRIMARY_LLM=groq
+    monkeypatch.setattr(config, "GEMINI_API_KEY", "fake-gemini-key")
+    monkeypatch.setattr(config, "PRIMARY_LLM", "groq")
+
+    warnings = config.validate_config()
+    assert any(
+        "groq" in w.lower() and ("fallback" in w.lower() or "empty" in w.lower() or "groq_api_key" in w.lower())
+        for w in warnings
+    ), f"Expected Groq fallback warning, got: {warnings}"
 
 
 # =============================================================================
-# Test 3 — JITTER_MIN >= JITTER_MAX
+# Test 3 — JITTER_MIN > JITTER_MAX
 # =============================================================================
 
 def test_validate_config_warns_on_invalid_jitter(monkeypatch):
-    cfg = _reload_config(monkeypatch, {
-        "GROQ_API_KEY": "fake-key",
-        "JITTER_MIN_SECONDS": "15",
-        "JITTER_MAX_SECONDS": "5",  # min > max
-    })
-    warnings = cfg.validate_config()
-    assert any("jitter" in w.lower() for w in warnings)
+    _patch_defaults(monkeypatch)
+    monkeypatch.setattr(config, "GROQ_API_KEY", "fake-key")
+    monkeypatch.setattr(config, "JITTER_MIN", 15.0)
+    monkeypatch.setattr(config, "JITTER_MAX", 5.0)   # min > max
 
-
-def test_validate_config_warns_on_equal_jitter(monkeypatch):
-    cfg = _reload_config(monkeypatch, {
-        "GROQ_API_KEY": "fake-key",
-        "JITTER_MIN_SECONDS": "10",
-        "JITTER_MAX_SECONDS": "10",  # equal is also invalid
-    })
-    warnings = cfg.validate_config()
-    assert any("jitter" in w.lower() for w in warnings)
+    warnings = config.validate_config()
+    assert any("jitter" in w.lower() for w in warnings), \
+        f"Expected jitter warning, got: {warnings}"
 
 
 # =============================================================================
-# Test 4 — Minimal valid config produces no critical warnings
+# Test 4 — JITTER_MIN == JITTER_MAX
+# =============================================================================
+
+def test_validate_config_warns_on_equal_jitter(monkeypatch):
+    _patch_defaults(monkeypatch)
+    monkeypatch.setattr(config, "GROQ_API_KEY", "fake-key")
+    monkeypatch.setattr(config, "JITTER_MIN", 10.0)
+    monkeypatch.setattr(config, "JITTER_MAX", 10.0)   # equal is invalid
+
+    warnings = config.validate_config()
+    assert any("jitter" in w.lower() for w in warnings), \
+        f"Expected jitter warning, got: {warnings}"
+
+
+# =============================================================================
+# Test 5 — Minimal valid config produces no LLM or jitter critical warnings
 # =============================================================================
 
 def test_validate_config_no_critical_warnings_when_configured(monkeypatch):
-    cfg = _reload_config(monkeypatch, {
-        "GROQ_API_KEY": "fake-groq-key",
-        "PRIMARY_LLM": "groq",
-        "DISCORD_WEBHOOK_URL": "https://discord.com/api/webhooks/fake",
-        "JITTER_MIN_SECONDS": "5",
-        "JITTER_MAX_SECONDS": "15",
-    })
-    warnings = cfg.validate_config()
-    # No warning should mention missing LLM keys or jitter config
+    _patch_defaults(monkeypatch)
+    monkeypatch.setattr(config, "GROQ_API_KEY", "fake-groq-key")
+    monkeypatch.setattr(config, "PRIMARY_LLM", "groq")
+    monkeypatch.setattr(config, "DISCORD_WEBHOOK_URL", "https://discord.com/api/webhooks/fake")
+    monkeypatch.setattr(config, "JITTER_MIN", 5.0)
+    monkeypatch.setattr(config, "JITTER_MAX", 15.0)
+
+    warnings = config.validate_config()
     critical_patterns = ["no llm api key", "jitter_min"]
     for w in warnings:
         for pattern in critical_patterns:
