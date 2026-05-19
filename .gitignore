@@ -65,6 +65,10 @@ gema_instructions.md
 *.tar.gz
 *.rar
 
+# Private session briefs — owner context only, never public
+PRIVATE_BRIEF.md
+PRIVATE_*.md
+
 # Misc
 *.xlsx
 *.csv
