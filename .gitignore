@@ -40,6 +40,9 @@ credentials/*.p12
 cookies/*.json
 !cookies/README.md
 
+# camoufox Firefox binary — ~530MB, downloaded at runtime via `python -m camoufox fetch`
+.camoufox/
+
 # Logs
 *.log
 logs/

@@ -45,6 +45,11 @@ openpyxl==3.1.5        # .xlsx writer engine used by pandas.to_excel()
 # ── Utilities ────────────────────────────────────────────────────────────────
 tenacity==8.3.0        # Exponential backoff for all external API calls
 
+# ── Anti-bot: Firefox fingerprint bypass ─────────────────────────────────────
+camoufox==0.4.11       # Firefox-based Playwright fork — bypasses Cloudflare Bot Fight Mode
+                       # on remoteok.com (Chromium's BoringSSL JA3 is blocked; Firefox NSS is not)
+                       # After install: python -m camoufox fetch  (downloads ~530MB Firefox binary)
+
 # ── Testing ───────────────────────────────────────────────────────────────────
 pytest==8.2.2          # Test runner — LLM callers are mocked; no real API calls made
 pytest-asyncio==0.23.8 # async def test support (required for cookie_vault async tests)

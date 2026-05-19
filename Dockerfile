@@ -1,6 +1,16 @@
 # =============================================================================
 # Dockerfile — Project GEMA
 # Base: Microsoft Playwright Python image (includes Chromium + all system deps)
+#
+# TWO BROWSERS ARE INSTALLED:
+#   1. Chromium (playwright install chromium) — all boards except remoteok.com
+#   2. Firefox via camoufox (python -m camoufox fetch) — remoteok.com only
+#      camoufox randomizes TLS/JA3 fingerprints to bypass Cloudflare Bot Fight
+#      Mode, which blocks Chromium's BoringSSL fingerprint reliably.
+#
+# Firefox binary download adds ~530MB to the image. If remoteok.com is not
+# in your target_domains, you can comment out the camoufox fetch line to
+# save space — the scraper degrades gracefully without it.
 # =============================================================================
 
 FROM mcr.microsoft.com/playwright/python:v1.50.0-jammy
@@ -11,10 +21,16 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Chromium browser binaries (system deps already in base image)
+# Install browser binaries
+# Chromium: used by Playwright for all job boards except remoteok.com
 RUN playwright install chromium
 
-# Copy source code
+# Firefox via camoufox: used only for remoteok.com Cloudflare bypass (~530MB)
+# Set CAMOUFOX_HOME so the binary lands in a predictable, writable location
+ENV CAMOUFOX_HOME=/app/.camoufox
+RUN python -m camoufox fetch
+
+# Copy source code (after browser installs — source changes don't invalidate browser cache)
 COPY . .
 
 # Streamlit port

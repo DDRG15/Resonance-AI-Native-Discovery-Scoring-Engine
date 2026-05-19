@@ -18,5 +18,9 @@ services:
       - ./gema_registry.db:/app/gema_registry.db
       # Mount credentials read-only — JSON key file never baked into the image
       - ./credentials:/app/credentials:ro
+      # Mount session cookies for login-gated boards (wellfound, arc.dev, etc.)
+      # Export cookies from Chrome using EditThisCookie V3 and drop JSON files here.
+      # Files are gitignored — never baked into the image.
+      - ./cookies:/app/cookies:ro
 
     restart: unless-stopped

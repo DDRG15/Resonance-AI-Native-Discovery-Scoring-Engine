@@ -1,45 +1,79 @@
 # =============================================================================
-# .dockerignore — keeps secrets and junk out of the Docker build context
+# .dockerignore — Project GEMA
+# Files excluded from the Docker build context.
+# Rule: if it's secret → exclude. If it's large and rebuilt in the image → exclude.
+# If it's runtime state mounted as a volume → exclude.
 # =============================================================================
 
-# Secrets — NEVER bake into the image
+# --- SECURITY: never bake secrets or credentials into the image ---
 .env
 .env.local
-credentials/
+.env.*.local
+credentials/*.json
+credentials/*.p12
+cookies/*.json          # session cookies — mount via docker-compose volume
 
-# Git history
-.git
-.gitignore
+# --- LARGE BINARIES: downloaded during `docker build`, not copied ---
+.camoufox/              # camoufox Firefox binary (~530MB) — built by `python -m camoufox fetch`
 
-# Python cache
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-
-# Database — mount as volume at runtime, don't bake stale data into image
+# --- RUNTIME STATE: mounted as volumes, not baked in ---
 *.db
 *.db-shm
 *.db-wal
 *.bak
 
-# Logs
-*.log
-logs/
+# --- GIT ---
+.git/
+.gitignore
 
-# IDE
+# --- PYTHON ARTIFACTS ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+.pytest_cache/
+
+# --- TESTING: not needed in production image ---
+tests/
+pytest.ini
+
+# --- DOCUMENTATION ---
+*.md
+!README.md
+
+# --- IDE ---
 .vscode/
 .idea/
 *.swp
+*.swo
 
-# OS
+# --- OS ---
 .DS_Store
 Thumbs.db
+desktop.ini
 
-# Claude Code internals
-.claude/
-
-# Misc
+# --- EXPORTS / GENERATED FILES ---
 *.xlsx
 *.csv
+*.log
+logs/
+
+# --- PRIVATE FILES ---
+PRIVATE_*.md
+gema_instructions.md
 pivot_instructions.txt
+
+# --- ARCHIVES ---
+*.zip
+*.tar.gz
+*.rar
+
+# --- CLAUDE CODE ---
+.claude/
