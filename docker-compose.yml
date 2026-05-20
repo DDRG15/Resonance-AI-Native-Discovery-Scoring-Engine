@@ -22,5 +22,7 @@ services:
       # Export cookies from Chrome using EditThisCookie V3 and drop JSON files here.
       # Files are gitignored — never baked into the image.
       - ./cookies:/app/cookies:ro
+      # Mount user profile so matcher uses real CV data — gitignored, never baked in
+      - ./user_profile.yaml:/app/user_profile.yaml:ro
 
     restart: unless-stopped
