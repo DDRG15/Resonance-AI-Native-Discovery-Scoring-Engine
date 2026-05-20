@@ -297,3 +297,5 @@ The daemon thread running the scraper attempted to read `st.session_state.search
 ---
 
 *GEMA is the extraction core. Resonance is where it runs.*
+
+*Actively maintained. New features are added as ideas and time allow.*

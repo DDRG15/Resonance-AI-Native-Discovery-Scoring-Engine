@@ -91,6 +91,9 @@ AUDIT_*.md
 # Distribution guide — references owner by name, not a public-facing doc
 BETA_GUIDE.md
 
+# Product roadmap — private strategy, not for public GitHub
+ROADMAP.md
+
 # README working drafts — review copies, not final documents
 README_DRAFT.md
 README_*.md
