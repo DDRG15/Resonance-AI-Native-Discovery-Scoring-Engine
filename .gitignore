@@ -72,21 +72,29 @@ gema_instructions.md
 *.tar.gz
 *.rar
 
-# Private session briefs — owner context only, never public
-PRIVATE_BRIEF.md
+# ── Private documents — NEVER push to GitHub ──────────────────────────────────
+# Rule: if a file is owner-only context, an internal log, a session brief,
+# or contains PII, it goes here. Use broad patterns so new files are caught
+# automatically without having to update this list.
+
+# Owner-context session briefs
 PRIVATE_*.md
 
-# Phase implementation reports — internal development notes, never public
-PHASE_*_REPORT.md
-AUDIT_REPORT.md
-HOTFIX_STARLETTE_REPORT.md
-IMPLEMENTATION_REPORT.md
+# Phase implementation reports (any phase number, any suffix)
+PHASE_*.md
 
-# Beta distribution guide — references owner by name, not for public GitHub
+# Internal reports of any kind: audit, hotfix, implementation, backlog, etc.
+*_REPORT.md
+HOTFIX_*.md
+AUDIT_*.md
+
+# Distribution guide — references owner by name, not a public-facing doc
 BETA_GUIDE.md
 
-# README drafts — intermediate review files, not for public GitHub
+# README working drafts — review copies, not final documents
 README_DRAFT.md
+README_*.md
+!README.md
 
 # Misc
 *.xlsx

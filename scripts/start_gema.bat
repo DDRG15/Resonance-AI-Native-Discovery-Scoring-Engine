@@ -64,6 +64,6 @@ echo ============================================================
 echo  GEMA is running at: http://localhost:8501
 echo.
 echo  To stop GEMA:  docker compose down
-echo  To update:     Ask Diego for a new package.
+echo  To update:     Contact the sender for a new package.
 echo ============================================================
 echo.
