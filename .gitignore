@@ -76,6 +76,18 @@ gema_instructions.md
 PRIVATE_BRIEF.md
 PRIVATE_*.md
 
+# Phase implementation reports — internal development notes, never public
+PHASE_*_REPORT.md
+AUDIT_REPORT.md
+HOTFIX_STARLETTE_REPORT.md
+IMPLEMENTATION_REPORT.md
+
+# Beta distribution guide — references owner by name, not for public GitHub
+BETA_GUIDE.md
+
+# README drafts — intermediate review files, not for public GitHub
+README_DRAFT.md
+
 # Misc
 *.xlsx
 *.csv
