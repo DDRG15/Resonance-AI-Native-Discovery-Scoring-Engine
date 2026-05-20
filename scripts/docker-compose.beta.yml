@@ -1,0 +1,24 @@
+# =============================================================================
+# docker-compose.beta.yml — GEMA Beta Distribution
+# Used by beta recipients — no build step, uses the pre-packaged image.
+# Diego: copy this to dist/docker-compose.yml when packaging for a friend.
+# =============================================================================
+
+services:
+  gema:
+    image: gema:beta-v1
+    ports:
+      - "8501:8501"
+
+    # Load API keys from .env — filled by the setup wizard on first run
+    env_file:
+      - .env
+
+    volumes:
+      # Persist the SQLite job registry across container restarts
+      - ./gema_registry.db:/app/gema_registry.db
+      # Session cookies for login-gated boards (wellfound, arc.dev, etc.)
+      # Drop EditThisCookie V3 JSON exports here if needed.
+      - ./cookies:/app/cookies:ro
+
+    restart: unless-stopped

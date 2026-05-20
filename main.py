@@ -124,6 +124,12 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# First-run check — show setup wizard if no LLM key is configured
+from setup_wizard import needs_setup, render_setup_wizard  # noqa: E402
+if needs_setup():
+    render_setup_wizard()
+    st.stop()
+
 # =============================================================================
 # Session State Initialization
 # =============================================================================

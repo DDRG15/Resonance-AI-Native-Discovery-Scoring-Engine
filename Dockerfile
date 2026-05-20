@@ -33,6 +33,13 @@ RUN python -m camoufox fetch
 # Copy source code (after browser installs — source changes don't invalidate browser cache)
 COPY . .
 
+# ── Sealed delivery: compile sources to .pyc then remove .py ─────────────────
+# This leaves only bytecode in the image — recipients cannot read source code.
+# __init__.py files are kept so Python's import machinery can find packages.
+# .venv and .camoufox are excluded — no Python sources there anyway.
+RUN python -m compileall -q . -b && \
+    find . -name "*.py" ! -name "__init__.py" ! -path "./.venv/*" ! -path "./.camoufox/*" -delete
+
 # Streamlit port
 EXPOSE 8501
 
