@@ -6,7 +6,7 @@
 
 # ── UI Layer ──────────────────────────────────────────────────────────────────
 streamlit==1.57.0
-starlette==0.41.3      # pinned — streamlit 1.57.0 requires >=0.40.0; 0.38.6 caused startup ImportError
+starlette==0.46.2      # pinned — DEFAULT_EXCLUDED_CONTENT_TYPES added in 0.42.0; 0.41.3 caused startup ImportError
 
 # ── Data Validation (Contract Layer) ─────────────────────────────────────────
 pydantic==2.7.1
