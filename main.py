@@ -150,7 +150,6 @@ DEFAULTS = {
     "dynamic_profile":     None,    # dict | None — ephemeral CV profile parsed this session
     "cv_file_hash":        None,    # str | None — SHA-256 of uploaded bytes; re-parse guard
     "extraction_prompt":   None,    # str | None — built from dynamic_profile
-    "cv_upload":           None,    # file uploader widget state
 }
 for key, default in DEFAULTS.items():
     if key not in st.session_state:
