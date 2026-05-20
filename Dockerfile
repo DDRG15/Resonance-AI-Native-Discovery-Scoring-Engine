@@ -37,8 +37,10 @@ COPY . .
 # This leaves only bytecode in the image — recipients cannot read source code.
 # __init__.py files are kept so Python's import machinery can find packages.
 # .venv and .camoufox are excluded — no Python sources there anyway.
+# main.py is kept -- Streamlit requires a .py entry point and cannot run .pyc directly.
+# All other modules are sealed: recipients can read the UI glue but not the logic.
 RUN python -m compileall -q . -b && \
-    find . -name "*.py" ! -name "__init__.py" ! -path "./.venv/*" ! -path "./.camoufox/*" -delete
+    find . -name "*.py" ! -name "__init__.py" ! -name "main.py" ! -path "./.venv/*" ! -path "./.camoufox/*" -delete
 
 # Streamlit port
 EXPOSE 8501
