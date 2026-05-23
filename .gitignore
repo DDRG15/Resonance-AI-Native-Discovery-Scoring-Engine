@@ -103,3 +103,9 @@ README_*.md
 *.xlsx
 *.csv
 pivot_instructions.txt
+
+# Personal CV data — use user_profile.yaml.example as template
+user_profile.yaml
+
+# Torre personal job search results — never public
+torre_job_analysis/
