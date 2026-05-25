@@ -101,35 +101,36 @@ SELECTORS: dict[str, DomainSelectors] = {
     "himalayas.app": DomainSelectors(
         domain               = "himalayas.app",
         search_url_template  = "https://himalayas.app/jobs?q={title}&remote=true",
-        wait_for_selector    = "div[data-testid='job-card']",
-        last_verified        = "2026-05-07",
+        # Verified 2026-05-25: Himalayas migrated from data-testid attrs to
+        # Tailwind utility classes + Next.js RSC. Job cards are now <article>
+        # elements; the canonical job link follows /companies/{co}/jobs/{slug}.
+        # wait_for_selector uses the link pattern (stable URL structure, not CSS).
+        wait_for_selector    = "a[href*='/companies/'][href*='/jobs/']",
+        last_verified        = "2026-05-25",
         null_threshold       = 5,
         job_card = [
-            "div[data-testid='job-card']",
-            "div.job-card",
-            "li[data-job-id]",
+            "article[class*='cursor-pointer']",
+            "article[class*='rounded-xl']",
+            "article",
         ],
         link = [
-            "a[data-testid='job-link']",
-            "a.job-card__link",
-            "a[href*='/jobs/']",
+            "a[href*='/companies/'][href*='/jobs/']",
         ],
         title = [
-            "h2[data-testid='job-title']",
-            "h2.job-title",
-            "h3.job-title",
+            # The visible title link is the same anchor — its text node is the title.
+            "a[href*='/companies/'][href*='/jobs/']",
             "h2",
+            "h3",
         ],
         company = [
-            "span[data-testid='company-name']",
-            ".company-name",
             "span[class*='company']",
+            "p[class*='company']",
+            "a[href*='/companies/']:not([href*='/jobs/'])",
         ],
         salary = [
-            "span[data-testid='salary']",
-            ".salary-range",
-            ".compensation",
             "span[class*='salary']",
+            "span[class*='compensation']",
+            "div[class*='salary']",
         ],
         next_page_btn = "a[aria-label='Next page']",
     ),

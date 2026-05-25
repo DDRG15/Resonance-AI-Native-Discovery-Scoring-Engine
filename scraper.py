@@ -451,7 +451,15 @@ class GemaScraper:
                 # Build task grid: (domain × title_query) pairs
                 # Each pair becomes one concurrent Page (tab) under the Semaphore
                 async def _bounded(domain: str, title: str):
+                    # Re-check circuit state: the domain may have been tripped
+                    # while this task was waiting in the asyncio.gather queue.
+                    # Without this check, all pre-queued tasks run even after
+                    # the breaker opens, wasting semaphore slots on a dead domain.
+                    if self.circuit.is_open(domain):
+                        return []
                     async with self._sem:
+                        if self.circuit.is_open(domain):
+                            return []
                         return await self._scrape_srp(context, domain, title)
 
                 pairs = [
@@ -698,6 +706,11 @@ class GemaScraper:
                     f"[TIMEOUT] wait_for_selector failed on {domain} for '{title}'. "
                     f"Selector: {sel.wait_for_selector!r}"
                 )
+                # Count timeouts against the circuit breaker so that a domain
+                # with a broken/drifted wait_for_selector opens the circuit after
+                # null_threshold consecutive timeouts — instead of consuming all
+                # semaphore slots until every title is exhausted.
+                self.circuit.record_null(domain, sel.null_threshold)
                 return []
 
             # Small jitter after load — avoids synchronized requests from
