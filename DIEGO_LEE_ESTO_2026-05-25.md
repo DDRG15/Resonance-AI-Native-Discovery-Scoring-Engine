@@ -182,6 +182,89 @@ d3fd3b7  fix(sheets): apply Tier-4 sentinel check in append_job + unit tests for
 
 ---
 
+---
+
+## 9. Fix: himalayas selectors + board_probe 301 redirect bug (sesión post-compactación)
+
+**QUÉ:** Dos bugs críticos corregidos para himalayas.app y board_probe.py.
+
+**DÓNDE:** `selectors_registry.py`, `board_probe.py`
+
+**POR QUÉ:** himalayas.app migró de `data-testid` attrs a Tailwind utility classes + Next.js RSC. El `wait_for_selector` original `div[data-testid='job-card']` nunca encontraba nada, causando timeout de 30s por query × 51 titles = 25+ minutos bloqueando todos los demás boards. board_probe.py capturaba el primer response (un 301 redirect) en lugar del final (200), produciendo clasificaciones UNKNOWN falsas para python.org, workingnomads y greenhouse.
+
+**CÓMO:**
+- himalayas: `job_card` → `article[class*='cursor-pointer']` | `link` → `a[href*='/companies/'][href*='/jobs/']:not([class*='absolute'])` para excluir el overlay invisble "View job" | `wait_for_selector` → `a[href*='/companies/'][href*='/jobs/']`
+- board_probe: probe usa `sel.search_url_template` (no root domain) | usa `page.goto()` return value para capturar el response final post-redirects
+
+**Commits:** `aed68cb`, `fd908ca`
+
+---
+
+## 10. Fix: weworkremotely global abort → per-domain rate limiting
+
+**QUÉ:** `_rate_hits` era un `int` global. 5 × 403 de weworkremotely llamaba `abort_event.set()` matando TODOS los dominios de la sesión.
+
+**DÓNDE:** `scraper.py`
+
+**POR QUÉ:** La tasa de bloqueo es per-dominio, no global. weworkremotely bloquea búsquedas keyword con 403 pero eso no debería afectar a remoteok, jobspresso, python.org.
+
+**CÓMO:** `self._rate_hits: int` → `self._rate_hits_by_domain: dict[str, int]`. Cuando hits ≥ MAX_RATE_LIMIT_HITS para un dominio, llama `circuit.open_circuit(domain)` solo para ese dominio.
+
+**Commit:** `fd908ca`
+
+---
+
+## 11. Fix: circuit breaker threshold incorrecta + open_circuit()
+
+**QUÉ:** El CircuitBreaker inicializaba el threshold de un dominio con `config.CIRCUIT_BREAKER_THRESHOLD=3` cuando `_bounded()` llamaba `is_open()`. Luego `record_null(domain, threshold=5)` no podía sobrescribirlo — `_ensure()` solo escribía en primera creación. himalayas.app se circuit-breakeaba en 3 nulls en lugar de 5.
+
+**DÓNDE:** `scraper.py` — clase `CircuitBreaker`
+
+**POR QUÉ:** Con 3 searches de himalayas corriendo concurrentemente, cada una retornando 0 jobs, el threshold=3 se alcanzaba inmediatamente, cerrando todos los 51 titles restantes de himalayas.
+
+**CÓMO:**
+1. `_ensure()` ahora actualiza threshold upward cuando el nuevo valor es mayor — per-domain selector thresholds ganan sobre el config default.
+2. `open_circuit(domain)` — método nuevo para forzar apertura inmediata (rate-limit / bot-block), reemplaza el hack `record_null(threshold=1)`.
+3. Ambos handlers de rate-limit ahora llaman `open_circuit()`.
+4. El log del WARNING ahora muestra `null_count` real, no `threshold`.
+
+**Commit:** `f6ecc70`
+
+---
+
+## 12. Sesión de scraping autónomo (run bt7dcaryc)
+
+**QUÉ:** Scrape completo con 51 titles × 17 boards (663 SRP tasks).
+
+**CUÁNDO:** 12:36–13:19 Lima, 2026-05-25 (43 minutos).
+
+**RESULTADOS:**
+- New=27 (Tier 1: 17, Tier 2: 11, Tier 3: 31)
+- Seen-skip=2729, TTL-skip=33, Errors=0
+- Fuente principal: python.org (25 Tier 1 jobs)
+- 17 Tier 1 alerts enviados a Discord
+
+**Boards funcionales:** python.org, remoteok.com (1 job)
+**Boards bloqueados/broken:** himalayas (circuit threshold bug), weworkremotely (403), workingnomads (.list-item timeout), HN (.itemlist timeout), arc.dev (link selector), builtin (link selector), jobspresso (link selector), greenhouse (0 cards — URL del career page era interno)
+
+**Fix aplicado para próximo run:** circuit breaker threshold (f6ecc70). Las demás broken boards requieren selector verification → ver `board_profiles.md`.
+
+---
+
+## 13. board_profiles.md creado
+
+**QUÉ:** Documento de referencia por board: estado de protección, salud de selectores, problemas conocidos, cookies requeridas.
+
+**DÓNDE:** `board_profiles.md` (archivo nuevo)
+
+**POR QUÉ:** Antes no existía ningún documento que explicara por qué ciertos boards fallan, qué protección tienen, y qué selectores están verificados vs. best-effort. Sin este documento, cada sesión empieza desde cero investigando los mismos boards.
+
+**CÓMO:** Basado en datos del live probe de la sesión bt7dcaryc + inspección HTML manual de himalayas.app, workingnomads.com, y HN. Incluye tabla rápida de estado (HTTP, protección, selector status) y sección detallada por board con estructura DOM y acciones recomendadas.
+
+**Commit:** `3a05f0b`
+
+---
+
 ## Lo que queda pendiente (no bloqueante)
 
 **F01 — Rotación de API keys:** Cinco keys fueron visibles en output de un explore agent durante la sesión. Las keys están en `.env` que está gitignoreado y nunca salió al network. El riesgo es bajo pero la rotación es buena práctica. Diego debe verificar y rotar a su criterio en los dashboards de cada proveedor (Groq, Google, OpenRouter, Cohere, Discord).
