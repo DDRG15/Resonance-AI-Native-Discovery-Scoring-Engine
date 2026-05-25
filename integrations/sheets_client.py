@@ -94,7 +94,7 @@ class SheetsClient:
             job.salary_raw or "",
             job.url,
             tiered_job.tier,
-            tiered_job.match_score,
+            tiered_job.match_score if tiered_job.match_score >= 0 else "",
             run_id,
         ]
 
