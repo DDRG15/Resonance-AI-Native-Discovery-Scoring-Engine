@@ -59,7 +59,11 @@ def send_discord_alert(message: str) -> None:
         req = urllib.request.Request(
             config.DISCORD_WEBHOOK_URL,
             data=data,
-            headers={"Content-Type": "application/json"},
+            headers={
+                "Content-Type": "application/json",
+                # Cloudflare blocks requests without a browser User-Agent (error 1010).
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            },
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=5):
@@ -198,7 +202,10 @@ def _http_post_sync(url: str, payload: dict) -> None:
     req  = urllib.request.Request(
         url,
         data=data,
-        headers={"Content-Type": "application/json; charset=utf-8"},
+        headers={
+            "Content-Type": "application/json; charset=utf-8",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        },
         method="POST",
     )
     # 10s connect+read timeout — webhook latency is predictable
