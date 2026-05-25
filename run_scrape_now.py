@@ -66,6 +66,7 @@ def main() -> None:
     # Titles cover backend, SRE, DevOps, and data engineering tracks.
     cfg = SearchConfig(
         target_titles=[
+            # ── Original titles ───────────────────────────────────────────────
             "Python Backend Developer",
             "Backend Engineer",
             "Python Developer",
@@ -74,6 +75,68 @@ def main() -> None:
             "DevOps Engineer",
             "Data Engineer",
             "Software Engineer Python",
+
+            # ── Junior / entry-level angle ────────────────────────────────────
+            "Junior Python Developer",
+            "Junior Backend Developer",
+            "Junior Backend Engineer",
+            "Junior Python Engineer",
+            "Junior Software Engineer",
+            "Junior Developer",
+            "Junior Data Engineer",
+            "Junior SRE",
+            "Junior DevOps Engineer",
+            "Entry Level Python Developer",
+            "Associate Python Developer",
+
+            # ── FastAPI / asyncio / framework-specific ────────────────────────
+            "FastAPI Developer",
+            "FastAPI Python",
+            "Python FastAPI",
+            "Python asyncio Developer",
+
+            # ── Delivery Engineer (user-requested angle) ──────────────────────
+            "Delivery Engineer",
+            "Python Delivery Engineer",
+            "Software Delivery Engineer",
+
+            # ── Integration / API integration (user-requested) ────────────────
+            "Integration Engineer",
+            "API Integration Engineer",
+            "Integration Developer",
+            "Python Integration Developer",
+            "API Integration Developer",
+            "API Developer Python",
+            "Python API Developer",
+
+            # ── Projects from CV: scraping / automation ───────────────────────
+            "Automation Engineer Python",
+            "Python Automation Engineer",
+            "Web Scraping Python",
+            "Python Scraping Developer",
+
+            # ── Projects from CV: data pipeline / ETL ────────────────────────
+            "Data Pipeline Engineer",
+            "Python Data Pipeline",
+            "ETL Developer Python",
+
+            # ── Projects from CV: reliability / observability ─────────────────
+            "Python SRE",
+            "Reliability Engineer Python",
+            "Platform Engineer Python",
+            "Python DevOps Engineer",
+            "Observability Engineer",
+
+            # ── Webhook / event-driven (Micro-Billing-Ledger) ─────────────────
+            "Webhook Developer Python",
+            "Event Driven Developer",
+
+            # ── Single-word tags (for tag-based boards like workingnomads) ────
+            "python",
+            "fastapi",
+            "backend",
+            "junior",
+            "sre",
         ],
         must_include=[],
         must_exclude=[],
