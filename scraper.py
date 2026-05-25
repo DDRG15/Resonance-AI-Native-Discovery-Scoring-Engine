@@ -275,13 +275,18 @@ class GemaScraper:
         # (no await between them), and asyncio is single-threaded cooperative.
         self._session_seen: set[str] = set()
 
-        # Abort event: set when rate limit hits exceed MAX_RATE_LIMIT_HITS.
-        # All running gather tasks check this and return early.
+        # Abort event: set only when a GLOBAL rate limit condition is detected
+        # (e.g., residential IP banned across multiple domains simultaneously).
+        # Single-domain 403s now use per-domain circuit breaking instead of
+        # triggering this global abort — see _rate_hits_by_domain below.
         self._abort_event = asyncio.Event()
 
-        # rate-limit hit counter — tracked on scraper instance, NOT on the
-        # Pydantic ScrapeRunSummary model (Pydantic v2 rejects undeclared attrs)
-        self._rate_hits: int = 0
+        # Per-domain rate-limit hit counters.
+        # When a single domain hits MAX_RATE_LIMIT_HITS consecutive 403/429s,
+        # that domain is circuit-broken (skipped for remaining titles) without
+        # aborting other domains. Previously _rate_hits was a global int that
+        # caused weworkremotely's 5 consecutive 403s to kill the entire session.
+        self._rate_hits_by_domain: dict[str, int] = {}
 
         # Collected jobs from all tasks (populated via write queue)
         self._all_jobs: list[JobResult] = []
@@ -628,10 +633,14 @@ class GemaScraper:
                     timeout=config.PAGE_TIMEOUT_MS,
                 )
                 if response and response.status in (403, 429):
-                    self._rate_hits += 1
+                    hits = self._rate_hits_by_domain.get(domain, 0) + 1
+                    self._rate_hits_by_domain[domain] = hits
                     self._log(
-                        f"[ANTI-BOT] HTTP {response.status} on {domain} page {page_num}"
+                        f"[ANTI-BOT] HTTP {response.status} on {domain} page {page_num} "
+                        f"({hits}/{config.MAX_RATE_LIMIT_HITS})"
                     )
+                    if hits >= config.MAX_RATE_LIMIT_HITS:
+                        self.circuit.record_null(domain, threshold=1)
                     return False
             else:
                 # Button/JS pagination — click and wait for navigation
@@ -683,16 +692,24 @@ class GemaScraper:
                 timeout=config.PAGE_TIMEOUT_MS,
             )
 
-            # Rate limit detection
+            # Rate limit detection — per-domain counter.
+            # When a domain accumulates MAX_RATE_LIMIT_HITS consecutive 403/429s,
+            # it is circuit-broken for the rest of this session. Other domains
+            # are unaffected. Previously a shared _rate_hits int caused
+            # weworkremotely's 403s to abort remoteok, himalayas, and everything else.
             if response and response.status in (403, 429):
-                self._rate_hits += 1
+                hits = self._rate_hits_by_domain.get(domain, 0) + 1
+                self._rate_hits_by_domain[domain] = hits
                 self._log(
                     f"[ANTI-BOT] HTTP {response.status} on {domain} "
-                    f"({self._rate_hits}/{config.MAX_RATE_LIMIT_HITS})"
+                    f"({hits}/{config.MAX_RATE_LIMIT_HITS})"
                 )
-                if self._rate_hits >= config.MAX_RATE_LIMIT_HITS:
-                    self._abort_event.set()
-                    self._log("[ABORT] Rate limit ceiling reached. Aborting all tasks.")
+                if hits >= config.MAX_RATE_LIMIT_HITS:
+                    self.circuit.record_null(domain, threshold=1)  # trip immediately
+                    self._log(
+                        f"[DOMAIN-BLOCK] {domain}: {hits} consecutive blocks. "
+                        f"Circuit opened — skipping remaining titles for this domain."
+                    )
                 return []
 
             # Wait for SRP cards to render (handles React hydration delay)

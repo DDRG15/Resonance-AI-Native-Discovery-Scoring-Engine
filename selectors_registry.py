@@ -114,18 +114,25 @@ SELECTORS: dict[str, DomainSelectors] = {
             "article",
         ],
         link = [
+            # The overlay link (class: absolute inset-0) covers the whole card
+            # for click area — it has an sr-only child "View job" and no visible text.
+            # The second link (no absolute class) is the visible title link.
+            # Both share the same /companies/.../jobs/... href pattern.
+            "a[href*='/companies/'][href*='/jobs/']:not([class*='absolute'])",
             "a[href*='/companies/'][href*='/jobs/']",
         ],
         title = [
-            # The visible title link is the same anchor — its text node is the title.
-            "a[href*='/companies/'][href*='/jobs/']",
+            # Same visible link — its direct text content is the job title.
+            "a[href*='/companies/'][href*='/jobs/']:not([class*='absolute'])",
             "h2",
             "h3",
         ],
         company = [
-            "span[class*='company']",
-            "p[class*='company']",
+            # Company name is rendered as a logo image alt text and/or a monogram.
+            # The company-page link (/companies/{slug}) without /jobs/ gives the slug.
+            "img[alt*='logo']",
             "a[href*='/companies/']:not([href*='/jobs/'])",
+            "span[class*='company']",
         ],
         salary = [
             "span[class*='salary']",

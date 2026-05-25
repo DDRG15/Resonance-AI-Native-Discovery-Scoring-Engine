@@ -196,10 +196,33 @@ def _classify(
 
 async def probe_board(domain: str, timeout_ms: int = 20_000) -> ProbeResult:
     """
-    Launch a stealth Playwright tab, navigate to domain root, classify protection.
-    Never raises — returns ProbeResult(protection_type=UNKNOWN) on any error.
+    Launch a stealth Playwright tab, navigate to the domain's actual search URL,
+    classify its protection type. Never raises.
+
+    WHY SEARCH URL INSTEAD OF ROOT:
+        Probing https://{domain} (the root) surfaces false UNKNOWN results because
+        many boards redirect their root (301/302) before returning 200 on the real
+        path. The scraper never hits the root — it jumps straight to the SRP.
+        Probing the SRP URL gives an accurate picture of what the scraper sees.
+
+    WHY page.goto() RETURN VALUE INSTEAD OF response LISTENER:
+        The previous implementation registered an _on_response listener and captured
+        only the FIRST response matching the domain (http_status == -1 guard).
+        For boards that redirect (301 → 200), the first response was always the
+        redirect, never the final 200, producing a false UNKNOWN classification.
+        page.goto() returns the Response object for the final navigation target
+        (after all same-origin and cross-origin redirects Playwright follows),
+        giving an accurate final HTTP status with zero listener complexity.
     """
-    url = f"https://{domain}"
+    # Use the real SRP search URL from the registry if available.
+    # Fall back to the domain root for boards not in the registry.
+    try:
+        from selectors_registry import get_selectors
+        sel = get_selectors(domain)
+        url = sel.search_url_template.format(title="python+developer") if sel else f"https://{domain}"
+    except Exception:
+        url = f"https://{domain}"
+
     http_status = -1
     response_headers: dict = {}
 
@@ -219,18 +242,12 @@ async def probe_board(domain: str, timeout_ms: int = 20_000) -> ProbeResult:
             )
             page = await context.new_page()
 
-            # Capture the first response from this domain
-            def _on_response(response):
-                nonlocal http_status, response_headers
-                if domain in response.url and http_status == -1:
-                    http_status = response.status
-                    response_headers = {k.lower(): v for k, v in response.headers.items()}
-
-            page.on("response", _on_response)
-
             try:
-                await page.goto(url, timeout=timeout_ms, wait_until="domcontentloaded")
-                body_raw = await page.content()
+                nav_response = await page.goto(url, timeout=timeout_ms, wait_until="domcontentloaded")
+                if nav_response:
+                    http_status    = nav_response.status
+                    response_headers = {k.lower(): v for k, v in nav_response.headers.items()}
+                body_raw    = await page.content()
                 body_sample = body_raw.lower()
             except Exception as nav_exc:
                 await browser.close()
