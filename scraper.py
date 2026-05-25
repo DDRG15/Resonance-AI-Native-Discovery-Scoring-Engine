@@ -107,6 +107,10 @@ class CircuitBreaker:
                 "total":       0,
                 "threshold":   threshold,
             }
+        elif threshold > self._domains[domain]["threshold"]:
+            # Per-domain selector thresholds (set via record_null) must win over
+            # the config default written by the first is_open() call from _bounded().
+            self._domains[domain]["threshold"] = threshold
 
     def record_success(self, domain: str) -> None:
         self._ensure(domain)
@@ -122,8 +126,14 @@ class CircuitBreaker:
             d["state"] = CircuitState.OPEN
             logger.warning(
                 "[CIRCUIT] %s OPEN after %d consecutive nulls. Activate God Mode.",
-                domain, d["threshold"],
+                domain, d["null_count"],
             )
+
+    def open_circuit(self, domain: str) -> None:
+        """Force circuit open immediately — for rate-limit / bot-block events."""
+        self._ensure(domain)
+        self._domains[domain]["state"] = CircuitState.OPEN
+        logger.warning("[CIRCUIT] %s FORCED OPEN (rate-limit / bot-block).", domain)
 
     def check_null_rate(self, domain: str, alert_threshold: float) -> bool:
         """
@@ -640,7 +650,7 @@ class GemaScraper:
                         f"({hits}/{config.MAX_RATE_LIMIT_HITS})"
                     )
                     if hits >= config.MAX_RATE_LIMIT_HITS:
-                        self.circuit.record_null(domain, threshold=1)
+                        self.circuit.open_circuit(domain)
                     return False
             else:
                 # Button/JS pagination — click and wait for navigation
@@ -705,7 +715,7 @@ class GemaScraper:
                     f"({hits}/{config.MAX_RATE_LIMIT_HITS})"
                 )
                 if hits >= config.MAX_RATE_LIMIT_HITS:
-                    self.circuit.record_null(domain, threshold=1)  # trip immediately
+                    self.circuit.open_circuit(domain)
                     self._log(
                         f"[DOMAIN-BLOCK] {domain}: {hits} consecutive blocks. "
                         f"Circuit opened — skipping remaining titles for this domain."
