@@ -642,6 +642,49 @@ SELECTORS: dict[str, DomainSelectors] = {
         salary = [],
         next_page_btn = "a[rel='next']",
     ),
+
+    # ── Startup.jobs ──────────────────────────────────────────────────────────
+    # Startup-focused board. React SPA with server-side rendered job cards.
+    # Remote filter appended via &remote=true. Salary rarely published.
+    # Selectors verified 2026-05-25 — run God Mode if null_rate trips.
+    "startup.jobs": DomainSelectors(
+        domain               = "startup.jobs",
+        search_url_template  = "https://startup.jobs/?q={title}&remote=true",
+        wait_for_selector    = "div.css-1wts5rl",
+        last_verified        = "2026-05-25",
+        null_threshold       = 5,
+        job_card = [
+            "div.css-1wts5rl",
+            "div[data-cy='job-card']",
+            "li[class*='job']",
+            "article[class*='job']",
+        ],
+        link = [
+            "a[data-cy='job-link']",
+            "a[href*='/jobs/']",
+            "h2 a",
+            "h3 a",
+        ],
+        title = [
+            "h2[class*='title']",
+            "h3[class*='title']",
+            "span[class*='title']",
+            "h2",
+            "h3",
+        ],
+        company = [
+            "span[class*='company']",
+            "p[class*='company']",
+            "div[class*='company']",
+            "a[class*='company']",
+        ],
+        salary = [
+            "span[class*='salary']",
+            "span[class*='compensation']",
+            "div[class*='salary']",
+        ],
+        next_page_btn = "a[aria-label='Next page']",
+    ),
 }
 
 

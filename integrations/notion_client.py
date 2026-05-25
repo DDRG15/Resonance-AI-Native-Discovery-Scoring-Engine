@@ -59,7 +59,8 @@ class NotionClient:
         """
         Creates a Notion page (Kanban card) for one tiered job.
 
-        Returns the created page ID, or None if the push failed.
+        Returns the created page ID, or None if the push failed permanently.
+        A 401 disables the integration immediately — no retries, no further calls.
         """
         if not self.is_enabled:
             logger.warning("Notion integration disabled — skipping push.")
@@ -122,6 +123,16 @@ class NotionClient:
             logger.info("Notion card created: %s | %s (%s)", job.title, job.company, tiered_job.tier)
             return page_id
         except Exception as exc:
+            # 401 = expired or revoked token — retrying will always fail.
+            # Disable integration immediately to avoid hammering the API.
+            if getattr(exc, "status", None) == 401:
+                logger.error(
+                    "Notion 401 Unauthorized — token expired or revoked. "
+                    "Disabling Notion integration for this session. "
+                    "Update NOTION_API_KEY in .env to re-enable."
+                )
+                self._client = None
+                return None
             logger.error("Notion push failed for %s: %s", job.title, exc)
             raise
 
@@ -136,10 +147,21 @@ class NotionClient:
         pushed, failed = 0, 0
         for tj in tiered_jobs:
             try:
-                self.push_job(tj)
-                pushed += 1
+                result = self.push_job(tj)
+                if result is not None:
+                    pushed += 1
+                else:
+                    failed += 1
             except Exception:
                 failed += 1
+            # 401 disables the client mid-batch — no point continuing
+            if not self.is_enabled:
+                remaining = len(tiered_jobs) - pushed - failed
+                failed += remaining
+                logger.warning(
+                    "Notion integration disabled mid-batch — skipping %d remaining jobs.", remaining
+                )
+                break
 
         logger.info("Notion batch: pushed=%d, failed=%d", pushed, failed)
         return {"pushed": pushed, "failed": failed, "skipped": 0}
