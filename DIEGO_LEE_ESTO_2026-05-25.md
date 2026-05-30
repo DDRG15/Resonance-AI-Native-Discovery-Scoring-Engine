@@ -265,6 +265,75 @@ d3fd3b7  fix(sheets): apply Tier-4 sentinel check in append_job + unit tests for
 
 ---
 
+## 14. Selector fixes parciales — sesión post-segunda-compactación
+
+**QUÉ:** Probe live de boards broken del run bt7dcaryc. jobspresso.co link selector corregido. arc.dev, workingnomads.com confirmados como broken con causa identificada.
+
+**CUÁNDO:** ~14:00 Lima, 2026-05-25.
+
+**HALLAZGOS POR BOARD:**
+
+| Board | Estado | Causa confirmada | Fix |
+|-------|--------|-----------------|-----|
+| jobspresso.co | **FIJADO** (sin commit aún) | Link era `a[href*='/remote-work/']` — nunca matchea. Link real es `a.job_listing-clickbox` con URL `/job/...` | `selectors_registry.py` ya editado — falta commit |
+| arc.dev | Broken | `div[data-testid='job-card']` no existe. Probe encontró 22 `div[class*=job]`. Link pattern real: `/remote-jobs/details/...` | Necesita probe deeper + selector update |
+| workingnomads.com | Broken | `.list-item` no existe en DOM. 1057 `div[class*=job]` pero primero es banner. Tag-based URL con multi-word tags retorna 0. | Probe con sessionid cookie + cambiar URL a single-word tags |
+| news.ycombinator.com | Broken | `.itemlist` timing out — `wait_for_selector` nunca se encuentra | Investigar selector correcto para tabla de jobs de HN |
+| builtin.com | Unverified | `div[data-id]` nunca se verificó live | God Mode o probe |
+| greenhouse.com | Broken | `div[class*='opening']` retorna 0 cards — URL es career page interna de Greenhouse (10 jobs máx) | Evaluar si vale mantener en rotation |
+
+**Cookies de Diego activas:**
+- `cookies/workingnomads.com.json` — sessionid `kewh791urpq0dbokq3cqn2pdbyyddiot` (exp ~2026-06-01). Guardado y gitignoreado.
+- `cookies/himalayas.app.json` — himalayas_access_token (exp 2026-05-27). **Renueva pronto.**
+- `cookies/jobspresso.co.json` — **NO guardado** — Diego los repegó en el chat pero el contexto se compactó antes de escribirlos. Pegar de nuevo al inicio de la próxima sesión.
+
+---
+
+## 15. TAREAS PARA LA PRÓXIMA SESIÓN — leer esto primero
+
+**Orden de prioridad:**
+
+### 1. Pegar cookies de jobspresso.co (2 min)
+Los 19 cookies se perdieron en la compactación de contexto. Pegar el JSON al inicio del chat — Claude los guarda en `cookies/jobspresso.co.json`.
+
+### 2. Commitear fix de jobspresso.co ya aplicado (1 min)
+`selectors_registry.py` ya tiene el link corregido a `a.job_listing-clickbox`. Solo falta:
+```
+git add selectors_registry.py
+git commit -m "fix(selectors): jobspresso link selector a.job_listing-clickbox verified 2026-05-25"
+```
+
+### 3. Probe y fix de arc.dev
+- `wait_for_selector`: cambiar a `a[href*='/remote-jobs/details/']`
+- `job_card`: cambiar a algo que matchee los 22 divs encontrados (probe con Playwright para confirmar)
+- `link`: `a[href*='/remote-jobs/details/']` como primer fallback
+
+### 4. Probe y fix de workingnomads.com (con cookies)
+- Correr probe Playwright con session cookies inyectados
+- Encontrar el selector correcto para job cards (`.list-item` es incorrecto)
+- Cambiar URL template: usar `?category=software-dev` o tags de una sola palabra como `python`, `backend`
+
+### 5. Fix de news.ycombinator.com
+- URL correcta: `https://news.ycombinator.com/jobs` (sin `?q=`)
+- `wait_for_selector`: probar `tr.athing` directamente en lugar de `.itemlist`
+
+### 6. Probe de builtin.com y greenhouse.com
+- builtin: God Mode o probe para encontrar selectores reales
+- greenhouse: evaluar si tiene suficiente volumen para mantener en rotation (sospechar que no)
+
+### 7. Crear scripts de exportación Excel
+- Script 1: todos los jobs del día de hoy desde `gema_registry.db`
+- Script 2: solo los jobs del último run (session_id más reciente)
+- Output: dos `.xlsx` listos para abrir
+
+### 8. Re-run scrape completo
+Después de todos los fixes commiteados. Esperar al menos 100+ jobs nuevos si los 6 boards broken vuelven a funcionar.
+
+### 9. Phase 14 — Setup Wizard + Docker sellado
+Plan aprobado en `~/.claude/plans/validated-wishing-gem.md`. Trabajo estimado: 1 sesión completa.
+
+---
+
 ## Lo que queda pendiente (no bloqueante)
 
 **F01 — Rotación de API keys:** Cinco keys fueron visibles en output de un explore agent durante la sesión. Las keys están en `.env` que está gitignoreado y nunca salió al network. El riesgo es bajo pero la rotación es buena práctica. Diego debe verificar y rotar a su criterio en los dashboards de cada proveedor (Groq, Google, OpenRouter, Cohere, Discord).
