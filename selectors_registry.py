@@ -285,30 +285,29 @@ SELECTORS: dict[str, DomainSelectors] = {
     ),
 
     # ── WorkingNomads ─────────────────────────────────────────────────────────
-    # Traditional HTML, remote-first board. Stable selectors.
+    # AngularJS SPA. Verified 2026-05-30: card IS the <a> element (a.job-desktop).
+    # Scraper card-as-link fallback handles href extraction (line 832 scraper.py).
+    # Relative URLs (/jobs/slug) resolved to https://workingnomads.com/jobs/slug.
+    # search_url uses single-word tags — multi-word tags return 0 results.
     "workingnomads.com": DomainSelectors(
         domain               = "workingnomads.com",
         search_url_template  = "https://www.workingnomads.com/jobs?tag={title}",
-        wait_for_selector    = ".list-item",
-        last_verified        = "2026-05-10",
+        wait_for_selector    = "a.job-desktop",
+        last_verified        = "2026-05-30",
         null_threshold       = 5,
         job_card = [
-            ".list-item",
-            "div.job",
-            "li.job-item",
+            "a.job-desktop",
         ],
         link = [
-            "h3 a",
-            "a.job-title",
-            "a[href*='/jobs/']",
+            "a.job-desktop",
         ],
         title = [
-            "h3 a",
+            "h4",
+            "[class*='title']",
             "h3",
-            ".position",
         ],
         company = [
-            ".company",
+            "[class*='company']",
             "span.company-name",
             "p.company",
         ],
@@ -323,11 +322,12 @@ SELECTORS: dict[str, DomainSelectors] = {
     # Static HTML, no keyword search — {title} param is ignored by HN.
     # Returns all current job posts from the /jobs page.
     # No structured salary field. Company often embedded in title.
+    # Verified 2026-05-30: wait_for_selector must be tr.athing (30 cards). .itemlist = 0.
     "news.ycombinator.com": DomainSelectors(
         domain               = "news.ycombinator.com",
         search_url_template  = "https://news.ycombinator.com/jobs?q={title}",
-        wait_for_selector    = ".itemlist",
-        last_verified        = "2026-05-10",
+        wait_for_selector    = "tr.athing",
+        last_verified        = "2026-05-30",
         null_threshold       = 10,
         job_card = [
             "tr.athing",
@@ -384,31 +384,32 @@ SELECTORS: dict[str, DomainSelectors] = {
 
     # ── Arc.dev ───────────────────────────────────────────────────────────────
     # May require login for full results. Graceful timeout → [] if blocked.
+    # Verified 2026-05-30: div[data-testid='job-card'] works (10 cards).
+    # Link is first <a> in card: a[href*='/remote-jobs/details/'] (6 of 10 cards).
+    # Other links in card are skill tag links (/remote-jobs/postgresql etc) — exclude.
     "arc.dev": DomainSelectors(
         domain               = "arc.dev",
         search_url_template  = "https://arc.dev/remote-jobs?q={title}",
         wait_for_selector    = "div[data-testid='job-card']",
-        last_verified        = "2026-05-10",
+        last_verified        = "2026-05-30",
         null_threshold       = 3,
         job_card = [
             "div[data-testid='job-card']",
-            "div[class*='JobCard']",
-            "li[class*='job']",
+            "div[class*='job-card']",
         ],
         link = [
-            "a[data-testid='job-link']",
-            "a[href*='/remote-jobs/']",
-            "h2 a",
+            "a[href*='/remote-jobs/details/']",
+            "a[href*='/remote-jobs/']:not([href*='/remote-jobs/ai']):not([href*='/remote-jobs/data']):not([href*='/remote-jobs/python'])",
         ],
         title = [
-            "h2[data-testid='job-title']",
-            "h2[class*='title']",
+            "a[href*='/remote-jobs/details/']",
             "h2",
+            "h3",
         ],
         company = [
-            "span[data-testid='company-name']",
-            "p[class*='company']",
+            "div.company-logo img",
             "span[class*='company']",
+            "p[class*='company']",
         ],
         salary = [
             "span[class*='salary']",
@@ -418,25 +419,26 @@ SELECTORS: dict[str, DomainSelectors] = {
 
     # ── Builtin ───────────────────────────────────────────────────────────────
     # React SPA, tech-focused US board. Filters to remote listings.
+    # Verified 2026-05-30: div[data-id] works (25 cards), a[href*='/job/'] confirmed.
+    # Has LATAM-specific remote listings — high signal for Diego.
     "builtin.com": DomainSelectors(
         domain               = "builtin.com",
         search_url_template  = "https://builtin.com/jobs/remote?search={title}",
         wait_for_selector    = "div[data-id]",
-        last_verified        = "2026-05-10",
+        last_verified        = "2026-05-30",
         null_threshold       = 5,
         job_card = [
             "div[data-id]",
             "div.job-card",
-            "li.job-listing-item",
         ],
         link = [
-            "a[data-id]",
             "a[href*='/job/']",
+            "a[data-id]",
             "h2 a",
         ],
         title = [
+            "a[href*='/job/']",
             "h2[class*='job-title']",
-            "a[class*='job-title']",
             "h2",
         ],
         company = [
@@ -558,22 +560,25 @@ SELECTORS: dict[str, DomainSelectors] = {
 
     # ── Jobspresso ────────────────────────────────────────────────────────────
     # WordPress + WP Job Manager. Clean HTML, minimal JS. Stable selectors.
+    # Verified 2026-05-25: li.job_listing (30 cards), link is a.job_listing-clickbox
+    # with absolute URL pattern /job/ (NOT /remote-work/). Title is h3.job_listing-title.
     "jobspresso.co": DomainSelectors(
         domain               = "jobspresso.co",
         search_url_template  = "https://jobspresso.co/remote-work/?search_keywords={title}",
         wait_for_selector    = "li.job_listing",
-        last_verified        = "2026-05-10",
+        last_verified        = "2026-05-25",
         null_threshold       = 5,
         job_card = [
             "li.job_listing",
             "article.job_listing",
         ],
         link = [
-            "a[href*='/remote-work/']",
+            "a.job_listing-clickbox",
+            "a[href*='/job/']",
             "h3 a",
-            "li.job_listing > a",
         ],
         title = [
+            "h3.job_listing-title",
             ".position",
             "h3",
             "h2",
