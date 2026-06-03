@@ -54,3 +54,5 @@ camoufox==0.4.11       # Firefox-based Playwright fork — bypasses Cloudflare B
 # ── Testing ───────────────────────────────────────────────────────────────────
 pytest==8.2.2          # Test runner — LLM callers are mocked; no real API calls made
 pytest-asyncio==0.23.8 # async def test support (required for cookie_vault async tests)
+pytest-cov==4.1.0      # coverage reporting and fail-under gating
+vcrpy==4.1.1           # record/playback HTTP interactions for integration tests

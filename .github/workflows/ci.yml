@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  scan_and_test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install system dependencies
+        run: |
+          python -m pip install --upgrade pip
+
+      - name: Install Python dependencies
+        run: |
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install -e . || true
+          pip install pytest coverage
+
+      - name: Run secrets scan for fixtures
+        working-directory: ./gema
+        run: |
+          python scripts/scan_fixtures.py
+
+      - name: Run tests (pytest + coverage + gate)
+        working-directory: ./gema
+        env:
+          GEMA_TEST_MODE: playback
+        run: |
+          coverage run -m pytest -q
+          coverage report --fail-under=80
+          coverage xml -o coverage.xml
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: gema/coverage.xml
