@@ -908,9 +908,10 @@ class GemaScraper:
         Title + Company are required: None on either → return None → circuit null.
         """
         try:
-            title   = await _try_chain(card, sel.title)
-            company = await _try_chain(card, sel.company)
-            salary  = await _try_chain(card, sel.salary) if sel.salary else None
+            title    = await _try_chain(card, sel.title)
+            company  = await _try_chain(card, sel.company)
+            salary   = await _try_chain(card, sel.salary)   if sel.salary   else None
+            location = await _try_chain(card, sel.location) if sel.location else None
 
             if not title or not company:
                 logger.debug(
@@ -924,6 +925,7 @@ class GemaScraper:
                 company=company,
                 url=url,
                 salary_raw=salary,
+                location_raw=location,
                 source_domain=domain,
             )
 
@@ -935,6 +937,36 @@ class GemaScraper:
 # =============================================================================
 # Streamlit Bridge
 # =============================================================================
+
+def run_full_pipeline(
+    search_config: SearchConfig,
+    db:            GemaDatabase,
+    log_queue:     queue.Queue,
+    ttl_hours:     int           = 0,
+    webhook:       Optional[WebhookClient] = None,
+    profile:       Optional[dict] = None,
+) -> tuple[list, list, list, list, ScrapeRunSummary]:
+    """
+    Full pipeline: scrape → score → update DB tiers.
+    Returns (tier1, tier2, tier3, tier4, summary).
+
+    Use this instead of run_scrape_session() when calling from scripts or CLI.
+    main.py uses run_scrape_session() + bucket_jobs() manually to drain the
+    log_queue in real-time; this function is the non-Streamlit equivalent.
+    """
+    from matcher import bucket_jobs
+
+    raw_jobs, summary = run_scrape_session(
+        search_config, db, log_queue, ttl_hours, webhook, profile
+    )
+
+    tier1, tier2, tier3, tier4 = bucket_jobs(raw_jobs, search_config, db, profile)
+    summary.tier1_count = len(tier1)
+    summary.tier2_count = len(tier2)
+    summary.tier3_count = len(tier3)
+
+    return tier1, tier2, tier3, tier4, summary
+
 
 def run_scrape_session(
     search_config: SearchConfig,

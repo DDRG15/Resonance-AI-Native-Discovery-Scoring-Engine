@@ -37,7 +37,8 @@ CREATE TABLE IF NOT EXISTS seen_jobs_registry (
     source_domain   TEXT NOT NULL,
     scraped_at      TEXT NOT NULL,
     tier            TEXT,
-    match_score     INTEGER
+    match_score     INTEGER,
+    location_raw    TEXT
 );
 """
 
@@ -106,6 +107,12 @@ class GemaDatabase:
             conn.execute(_DDL_SEARCH_VAULT)
             for idx_sql in _DDL_INDEXES:
                 conn.execute(idx_sql)
+            # Migration: add location_raw column to existing DBs that predate this field
+            try:
+                conn.execute("ALTER TABLE seen_jobs_registry ADD COLUMN location_raw TEXT")
+                logger.info("Migration: added location_raw column to seen_jobs_registry")
+            except Exception:
+                pass  # Column already exists — safe to ignore
         logger.info("Database initialized: %s", self.db_path)
 
     def backup(self) -> str:
@@ -311,14 +318,15 @@ class GemaDatabase:
                 self.compute_hash(j.url),
                 j.url, j.title, j.company,
                 j.source_domain, j.scraped_at.isoformat(),
+                j.location_raw,
             )
             for j in jobs
         ]
         with _get_connection(self.db_path) as conn:
             conn.executemany(
                 """INSERT OR IGNORE INTO seen_jobs_registry
-                   (job_hash, url, title, company, source_domain, scraped_at)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
+                   (job_hash, url, title, company, source_domain, scraped_at, location_raw)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 records,
             )
         logger.info("Batch-registered %d jobs.", len(records))

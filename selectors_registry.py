@@ -73,6 +73,10 @@ class DomainSelectors:
     # Salary selector — optional. None values are acceptable and route to Tier 4.
     salary:     list[str] = field(default_factory=list)
 
+    # Location selector — optional. Extracts raw location string (e.g. "USA", "Anywhere").
+    # None → location_raw stays None → location scoring skipped (neutral 0 pts).
+    location:   list[str] = field(default_factory=list)
+
     # ── Metadata ─────────────────────────────────────────────────────────────
 
     # ISO date the selectors were last verified against the live site.
@@ -314,6 +318,10 @@ SELECTORS: dict[str, DomainSelectors] = {
         salary = [
             ".salary",
             "span[class*='salary']",
+        ],
+        location = [
+            "div.box",
+            "[ng-show*='locations']",
         ],
         next_page_btn = "a[rel='next']",
     ),

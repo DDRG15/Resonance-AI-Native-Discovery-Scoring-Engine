@@ -134,6 +134,11 @@ class JobResult(BaseModel):
         description="Raw salary string as scraped (e.g. '$120k - $150k'). "
                     "None if not published.",
     )
+    location_raw: Optional[str] = Field(
+        default=None,
+        description="Raw location string as scraped (e.g. 'USA', 'Anywhere', 'EMEA'). "
+                    "None if not extracted by the board's selector.",
+    )
     source_domain: str = Field(..., description="The job board domain this was scraped from.")
     scraped_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),

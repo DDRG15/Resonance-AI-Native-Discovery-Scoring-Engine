@@ -158,6 +158,60 @@ def _score_skill_overlap(
     return score, match_reasons, miss_reasons
 
 
+def _score_location(job: JobResult) -> tuple[int, list[str], list[str]]:
+    """
+    Location accessibility filter for Diego in Lima, Peru.
+
+    Hard block  (-50): Security clearance / citizenship required → forces Tier 3.
+    Restricted  (-20): Explicit region lock (US only, EU only) without clearance context.
+    Open        (+10): Worldwide / anywhere / all time zones.
+    Neutral     (  0): No location signal found → do not penalise.
+
+    NOT a blanket "US = excluded" rule. Many US-posted roles are open to
+    international remote candidates. Only explicit work-authorization and
+    security clearance language triggers a penalty.
+    """
+    HARD_BLOCK = [
+        "security clearance", "top secret", "secret clearance", "ts/sci",
+        "us citizenship required", "must be a us citizen", "must be a citizen",
+        "usc only", "u.s. citizen", "government contractor", "dod clearance",
+        "public trust clearance", "federal contractor",
+    ]
+    RESTRICTED = [
+        "must be located in the us", "must reside in the us",
+        "must be authorized to work in the us",
+        "authorized to work in the united states",
+        "work authorization required", "right to work in the us",
+        "must be based in the uk", "eu only", "europe only",
+        "must be in the us", "us only", "usa only",
+        "must work from the us", "must be in united states",
+    ]
+    OPEN = [
+        "worldwide", "anywhere", "all time zones", "any time zone",
+        "global remote", "home based - worldwide", "fully remote - global",
+        "open to all locations", "no location restriction",
+    ]
+
+    searchable = " ".join(filter(None, [
+        job.title, job.company, job.salary_raw or "",
+        getattr(job, "location_raw", None) or "",
+    ])).lower()
+
+    for signal in HARD_BLOCK:
+        if signal in searchable:
+            return -50, [], [f"Hard block: '{signal}' detected — requires clearance/citizenship"]
+
+    for signal in OPEN:
+        if signal in searchable:
+            return 10, [f"Location open: '{signal}' found"], []
+
+    for signal in RESTRICTED:
+        if signal in searchable:
+            return -20, [], [f"Location restricted: '{signal}' detected"]
+
+    return 0, [], []
+
+
 def _apply_exclusion_penalty(
     job: JobResult,
     must_exclude: list[str],
@@ -226,6 +280,17 @@ def score_job(job: JobResult, search_config: SearchConfig, profile: Optional[dic
         Must-include   : 0–15
         Exclusion bonus: -10 to +10
     """
+    # ── Hard location block: clearance/citizenship required → straight to Tier 3 ──
+    loc_pre, _, loc_pre_miss = _score_location(job)
+    if loc_pre <= -50:
+        return TieredJob(
+            job=job,
+            match_score=0,
+            tier="Tier 3",
+            match_reasons=[],
+            miss_reasons=loc_pre_miss + ["Hard location block — auto-Tier 3"],
+        )
+
     # ── Tier 4 bypass: non-empty text salary that is not a parseable number ──
     salary_is_text = (
         job.salary_raw is not None
@@ -256,11 +321,12 @@ def score_job(job: JobResult, search_config: SearchConfig, profile: Optional[dic
     include_score, im, in_ = _score_must_include(job, search_config.must_include)
     excl_delta,    em, en  = _apply_exclusion_penalty(job, search_config.must_exclude)
     skill_score,   km, kn  = _score_skill_overlap(job, profile)
+    loc_delta,     lm, ln  = _score_location(job)
 
-    all_match.extend(tm + sm + im + em + km)
-    all_miss.extend(tn + sn + in_ + en + kn)
+    all_match.extend(tm + sm + im + em + km + lm)
+    all_miss.extend(tn + sn + in_ + en + kn + ln)
 
-    raw_score   = title_score + salary_score + include_score + excl_delta + skill_score
+    raw_score   = title_score + salary_score + include_score + excl_delta + skill_score + loc_delta
     # Cap at 115: the 15-pt skill bonus can push a strong Tier 2 into Tier 1
     # without disturbing the existing Tier 1 threshold (80 pts).
     final_score = max(0, min(115, raw_score))
