@@ -303,11 +303,11 @@ class GemaDatabase:
         with _get_connection(self.db_path) as conn:
             conn.execute(
                 """INSERT OR IGNORE INTO seen_jobs_registry
-                   (job_hash, url, title, company, source_domain, scraped_at)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
+                   (job_hash, url, title, company, source_domain, scraped_at, location_raw)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (
                     job_hash, job.url, job.title, job.company,
-                    job.source_domain, job.scraped_at.isoformat(),
+                    job.source_domain, job.scraped_at.isoformat(), job.location_raw,
                 ),
             )
 

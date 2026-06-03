@@ -280,15 +280,18 @@ def score_job(job: JobResult, search_config: SearchConfig, profile: Optional[dic
         Must-include   : 0–15
         Exclusion bonus: -10 to +10
     """
-    # ── Hard location block: clearance/citizenship required → straight to Tier 3 ──
-    loc_pre, _, loc_pre_miss = _score_location(job)
-    if loc_pre <= -50:
+    # ── Location scoring (single call — result reused for both hard-block check
+    #    and the mathematical delta to avoid calling the pure function twice) ──
+    loc_delta, lm, ln = _score_location(job)
+
+    # Hard block: clearance/citizenship required → straight to Tier 3, skip all scoring
+    if loc_delta <= -50:
         return TieredJob(
             job=job,
             match_score=0,
             tier="Tier 3",
             match_reasons=[],
-            miss_reasons=loc_pre_miss + ["Hard location block — auto-Tier 3"],
+            miss_reasons=ln + ["Hard location block — auto-Tier 3"],
         )
 
     # ── Tier 4 bypass: non-empty text salary that is not a parseable number ──
@@ -321,7 +324,7 @@ def score_job(job: JobResult, search_config: SearchConfig, profile: Optional[dic
     include_score, im, in_ = _score_must_include(job, search_config.must_include)
     excl_delta,    em, en  = _apply_exclusion_penalty(job, search_config.must_exclude)
     skill_score,   km, kn  = _score_skill_overlap(job, profile)
-    loc_delta,     lm, ln  = _score_location(job)
+    # loc_delta, lm, ln already computed above — reused here
 
     all_match.extend(tm + sm + im + em + km + lm)
     all_miss.extend(tn + sn + in_ + en + kn + ln)
