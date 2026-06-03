@@ -88,6 +88,7 @@ PHASE_*.md
 *_REPORT.md
 HOTFIX_*.md
 AUDIT_*.md
+AUDITORIA_*.md
 
 # Job search session results — scraped data with personal context
 JOBS_*.md
