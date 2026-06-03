@@ -79,6 +79,7 @@ gema_instructions.md
 
 # Owner-context session briefs
 PRIVATE_*.md
+DIEGO_LEE_ESTO_*.md
 
 # Phase implementation reports (any phase number, any suffix)
 PHASE_*.md
@@ -87,6 +88,11 @@ PHASE_*.md
 *_REPORT.md
 HOTFIX_*.md
 AUDIT_*.md
+
+# Job search session results — scraped data with personal context
+JOBS_*.md
+ANALISIS_*.md
+board_profiles.md
 
 # Distribution guide — references owner by name, not a public-facing doc
 BETA_GUIDE.md
@@ -106,6 +112,9 @@ pivot_instructions.txt
 
 # Personal CV data — use user_profile.yaml.example as template
 user_profile.yaml
+
+# Temporary scrape data files — not source code
+tier1_raw.json
 
 # Torre personal job search results — never public
 torre_job_analysis/

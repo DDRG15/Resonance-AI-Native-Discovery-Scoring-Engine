@@ -28,10 +28,10 @@ def needs_setup() -> bool:
     """Return True if no LLM API key is configured in the current environment."""
     importlib.reload(config)
     return not any([
-        config.GROQ_API_KEY,
-        config.GEMINI_API_KEY,
-        config.OPENROUTER_API_KEY,
-        config.COHERE_API_KEY,
+        config.GROQ_API_KEY.strip(),
+        config.GEMINI_API_KEY.strip(),
+        config.OPENROUTER_API_KEY.strip(),
+        config.COHERE_API_KEY.strip(),
     ])
 
 

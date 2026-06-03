@@ -67,6 +67,11 @@ logs/
 
 # --- PRIVATE FILES ---
 PRIVATE_*.md
+DIEGO_LEE_ESTO_*.md
+JOBS_*.md
+ANALISIS_*.md
+board_profiles.md
+tier1_raw.json
 gema_instructions.md
 pivot_instructions.txt
 
